@@ -1,7 +1,7 @@
 brace_style = "PreferSameLine"
 fn_args_layout = "Compressed"
-ignore = ["src/protocol"]
+ignore = []
 max_width = 100
-tab_spaces = 4
+tab_spaces = 2
 use_small_heuristics = "Max"
 where_single_line = true
