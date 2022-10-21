@@ -1,28 +1,28 @@
-use crate::batch_x::BatchX;
-use crate::consts::*;
 use crate::options::Options;
 use crate::table::Table;
 use crate::types::*;
-use crate::update_iterator::UpdateIterator;
+use crate::update_batch_iterator::UpdateBatchIterator;
 use crate::utils::*;
 use crate::Error;
-use rocksdb::DB;
+use crate::{consts::*, update::Update};
+use crate::{update_batch::UpdateBatch, write_batch_x::WriteBatchX};
+use rocksdb::DB as DbInner;
 use rocksdb::{ReadOptions, WriteBatch};
 use std::path::Path;
 
 pub struct Db {
-  pub(in crate) inner: DB,
+  pub(crate) inner: DbInner,
 }
 
 impl Db {
   #[inline]
   pub fn new<P: AsRef<Path>>(path: P, opts: &Options) -> Result<Db, Error> {
-    Ok(Db { inner: DB::open(&opts.inner, path)? })
+    Ok(Db { inner: DbInner::open(&opts.inner, path)? })
   }
 
   #[inline]
   pub fn destroy<P: AsRef<Path>>(path: P) -> Result<(), Error> {
-    DB::destroy(&Options::new().inner, path)
+    DbInner::destroy(&Options::new().inner, path)
   }
 
   #[inline]
@@ -110,19 +110,36 @@ impl Db {
   }
 
   #[inline]
-  pub fn get_updates_since(&self, sn: u64) -> Result<UpdateIterator, Error> {
+  pub fn get_updates_since(&self, sn: u64) -> Result<UpdateBatchIterator, Error> {
     let iter = self.inner.get_updates_since(sn)?;
-    Ok(UpdateIterator::new(iter))
+    Ok(UpdateBatchIterator::new(iter))
   }
 
   #[inline]
-  pub fn batch_x() -> BatchX {
-    BatchX::new()
+  pub fn replay_updates(&self, update_batches: Vec<UpdateBatch>) -> Result<(), Error> {
+    let mut batch = WriteBatch::default();
+    for update_batch in update_batches {
+      for update in update_batch.updates {
+        if let Some(update) = update.update {
+          match update {
+            Update::Put(put) => batch.put(put.key, put.value),
+            Update::Delete(delete) => batch.delete(delete.key),
+          }
+        }
+      }
+    }
+    self.inner.write(batch)?;
+    Ok(())
   }
 
   #[inline]
-  pub fn write(&self, b: BatchX) -> Result<(), Error> {
-    self.inner.write(b.inner)
+  pub fn write_batch_x() -> WriteBatchX {
+    WriteBatchX::new()
+  }
+
+  #[inline]
+  pub fn write(&self, batch: WriteBatchX) -> Result<(), Error> {
+    self.inner.write(batch.inner)
   }
 
   fn create_table(&self, name: &str) -> Result<Table, Error> {
@@ -272,7 +289,7 @@ fn test_get_latest_sn() {
     assert!(result.is_ok());
     let sn2 = db.get_latest_sn();
     assert_eq!(sn1 + 2, sn2);
-    let mut batch = table.batch();
+    let mut batch = table.write_batch();
     batch.put(b"k111", b"v111");
     batch.delete(b"k111");
     batch.delete_range(b"k111", b"k112");
@@ -285,30 +302,40 @@ fn test_get_latest_sn() {
 #[test]
 fn test_get_updates_since() {
   run_test("test_get_updates_since", |db| {
+    let sn0 = db.get_latest_sn();
+    assert_eq!(sn0, 0);
+
     let table = db.create_table("huobi.btc.usdt.1m").unwrap();
     assert_eq!(table.id, MIN_USERLAND_TABLE_ID);
     let table = db.create_table("huobi.btc.usdt.3m").unwrap();
     db.destroy_table("huobi.btc.usdt.3m").unwrap();
+
     let sn1 = db.get_latest_sn();
+    assert_eq!(sn0 + 11, sn1);
+
     let result = table.put(b"k111", b"v111");
     assert!(result.is_ok());
     let result = table.delete(b"k111");
     assert!(result.is_ok());
+
     let sn2 = db.get_latest_sn();
     assert_eq!(sn1 + 2, sn2);
-    let mut batch = table.batch();
+
+    let mut batch = table.write_batch();
     batch.put(b"k112", b"v112");
     batch.delete(b"k111");
     batch.delete_range(b"k111", b"k112");
     table.write(batch).unwrap();
+
     let sn3 = db.get_latest_sn();
     assert_eq!(sn2 + 4, sn3);
+
     let iter = db.get_updates_since(0).unwrap();
     let mut result = vec![];
     for ub in iter {
       result.push(ub);
     }
-    assert_eq!(format!("{:?}", result), "[[Put {key:b\"\\0\\0\\0\\0\\0\\0\", value:b\"\\0\\0\\x04\\0\"}]@2, [Put {key:b\"\\0\\0\\0\\x01huobi.btc.usdt.1m\", value:b\"\\0\\0\\x04\\0\"}, Put {key:b\"\\0\\0\\0\\x02\\0\\0\\x04\\0\", value:b\"huobi.btc.usdt.1m\"}]@3, [Put {key:b\"\\0\\0\\0\\0\\0\\0\", value:b\"\\0\\0\\x04\\x01\"}]@5, [Put {key:b\"\\0\\0\\0\\x01huobi.btc.usdt.3m\", value:b\"\\0\\0\\x04\\x01\"}, Put {key:b\"\\0\\0\\0\\x02\\0\\0\\x04\\x01\", value:b\"huobi.btc.usdt.3m\"}]@6, [Delete {key:b\"\\0\\0\\0\\x01huobi.btc.usdt.3m\"}, Delete {key:b\"\\0\\0\\0\\x02\\0\\0\\x04\\x01\"}, DeleteRange {from_key:b\"\\0\\0\\x04\\x01\", to_key:b\"\\0\\0\\x04\\x01\\xff\\xff\\xff\\xff\\xff\"}]@8, [Put {key:b\"\\0\\0\\x04\\x01k111\", value:b\"v111\"}]@12, [Delete {key:b\"\\0\\0\\x04\\x01k111\"}]@13, [Put {key:b\"\\0\\0\\x04\\x01k112\", value:b\"v112\"}, Delete {key:b\"\\0\\0\\x04\\x01k111\"}, DeleteRange {from_key:b\"k111\", to_key:b\"k112\"}]@14]");
+    assert_eq!(format!("{:?}", result), "[UpdateBatch { sn: 2, updates: [OptionalUpdate { update: Some(Put(Put { key: b\"\\0\\0\\0\\0\\0\\0\", value: b\"\\0\\0\\x04\\0\" })) }] }, UpdateBatch { sn: 3, updates: [OptionalUpdate { update: Some(Put(Put { key: b\"\\0\\0\\0\\x01huobi.btc.usdt.1m\", value: b\"\\0\\0\\x04\\0\" })) }, OptionalUpdate { update: Some(Put(Put { key: b\"\\0\\0\\0\\x02\\0\\0\\x04\\0\", value: b\"huobi.btc.usdt.1m\" })) }] }, UpdateBatch { sn: 5, updates: [OptionalUpdate { update: Some(Put(Put { key: b\"\\0\\0\\0\\0\\0\\0\", value: b\"\\0\\0\\x04\\x01\" })) }] }, UpdateBatch { sn: 6, updates: [OptionalUpdate { update: Some(Put(Put { key: b\"\\0\\0\\0\\x01huobi.btc.usdt.3m\", value: b\"\\0\\0\\x04\\x01\" })) }, OptionalUpdate { update: Some(Put(Put { key: b\"\\0\\0\\0\\x02\\0\\0\\x04\\x01\", value: b\"huobi.btc.usdt.3m\" })) }] }, UpdateBatch { sn: 8, updates: [OptionalUpdate { update: Some(Delete(Delete { key: b\"\\0\\0\\0\\x01huobi.btc.usdt.3m\" })) }, OptionalUpdate { update: Some(Delete(Delete { key: b\"\\0\\0\\0\\x02\\0\\0\\x04\\x01\" })) }, OptionalUpdate { update: Some(Delete(Delete { key: b\"\\0\\0\\0\\x03\\x92\\x94\\0\\0\\x04\\x01\\x99\\0\\0\\x04\\x01\\xcc\\xff\\xcc\\xff\\xcc\\xff\\xcc\\xff\\xcc\\xff\" })) }] }, UpdateBatch { sn: 12, updates: [OptionalUpdate { update: Some(Put(Put { key: b\"\\0\\0\\x04\\x01k111\", value: b\"v111\" })) }] }, UpdateBatch { sn: 13, updates: [OptionalUpdate { update: Some(Delete(Delete { key: b\"\\0\\0\\x04\\x01k111\" })) }] }, UpdateBatch { sn: 14, updates: [OptionalUpdate { update: Some(Put(Put { key: b\"\\0\\0\\x04\\x01k112\", value: b\"v112\" })) }, OptionalUpdate { update: Some(Delete(Delete { key: b\"\\0\\0\\x04\\x01k111\" })) }, OptionalUpdate { update: Some(Delete(Delete { key: b\"\\0\\0\\0\\x03\\x92\\x94k111\\x94k112\" })) }] }]");
   })
 }
 

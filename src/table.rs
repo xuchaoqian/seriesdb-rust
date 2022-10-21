@@ -1,8 +1,8 @@
-use crate::batch::Batch;
 use crate::db::Db;
 use crate::entry_cursor::EntryCursor;
 use crate::types::*;
 use crate::utils::*;
+use crate::write_batch::WriteBatch;
 use crate::Error;
 use bytes::Bytes;
 use rocksdb::ReadOptions;
@@ -10,9 +10,9 @@ use std::fmt;
 
 #[derive(Clone)]
 pub struct Table<'a> {
-  pub(in crate) db: &'a Db,
-  pub(in crate) id: TableId,
-  pub(in crate) anchor: Bytes,
+  pub(crate) db: &'a Db,
+  pub(crate) id: TableId,
+  pub(crate) anchor: Bytes,
 }
 
 impl<'a> fmt::Debug for Table<'a> {
@@ -23,7 +23,7 @@ impl<'a> fmt::Debug for Table<'a> {
 
 impl<'a> Table<'a> {
   #[inline]
-  pub(in crate) fn new(db: &Db, id: TableId, anchor: Bytes) -> Table {
+  pub(crate) fn new(db: &Db, id: TableId, anchor: Bytes) -> Table {
     Table { db, id, anchor }
   }
 
@@ -31,18 +31,19 @@ impl<'a> Table<'a> {
   pub fn put<K, V>(&self, key: K, value: V) -> Result<(), Error>
   where
     K: AsRef<[u8]>,
-    V: AsRef<[u8]>, {
+    V: AsRef<[u8]>,
+  {
     self.db.inner.put(build_inner_key(self.id, key), value)
   }
 
   #[inline]
-  pub fn batch(&self) -> Batch {
-    Batch::new(self.id)
+  pub fn write_batch(&self) -> WriteBatch {
+    WriteBatch::new(self.id)
   }
 
   #[inline]
-  pub fn write(&self, b: Batch) -> Result<(), Error> {
-    self.db.inner.write(b.inner)
+  pub fn write(&self, batch: WriteBatch) -> Result<(), Error> {
+    self.db.inner.write(batch.inner)
   }
 
   #[inline]

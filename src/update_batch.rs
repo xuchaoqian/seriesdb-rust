@@ -1,36 +1,28 @@
-use crate::consts::*;
-use crate::update::Update;
-use crate::utils::*;
+use crate::update::*;
 use bytes::Bytes;
+use prost::Message;
 use rocksdb::WriteBatchIterator;
-use std::fmt::{Debug, Formatter, Result as FmtResult};
 
+#[derive(Clone, PartialEq, Message)]
 pub struct UpdateBatch {
+  #[prost(uint64, tag = "1")]
   pub sn: u64,
-  pub updates: Vec<Update>,
+  #[prost(message, repeated, tag = "2")]
+  pub updates: Vec<OptionalUpdate>,
 }
 
 impl WriteBatchIterator for UpdateBatch {
   fn put(&mut self, key: Box<[u8]>, value: Box<[u8]>) {
-    self.updates.push(Update::Put {
+    let put = Put {
       key: Bytes::copy_from_slice(key.as_ref()),
       value: Bytes::copy_from_slice(value.as_ref()),
-    })
+    };
+    self.updates.push(OptionalUpdate { update: Some(Update::Put(put)) })
   }
-  fn delete(&mut self, key: Box<[u8]>) {
-    let table_id = extract_table_id(&key);
-    if table_id == DELETE_RANGE_HINT_TABLE_ID {
-      let (from_key, to_key) = extract_delete_range_hint(key);
-      self.updates.push(Update::DeleteRange { from_key, to_key })
-    } else {
-      self.updates.push(Update::Delete { key: Bytes::copy_from_slice(key.as_ref()) })
-    }
-  }
-}
 
-impl Debug for UpdateBatch {
-  fn fmt(&self, f: &mut Formatter) -> FmtResult {
-    write!(f, "{:?}@{:?}", &self.updates, self.sn)
+  fn delete(&mut self, key: Box<[u8]>) {
+    let delete = Delete { key: Bytes::copy_from_slice(key.as_ref()) };
+    self.updates.push(OptionalUpdate { update: Some(Update::Delete(delete)) })
   }
 }
 

@@ -1,28 +1,27 @@
 use crate::update_batch::UpdateBatch;
 use rocksdb::DBWALIterator;
 
-pub struct UpdateIterator {
+pub struct UpdateBatchIterator {
   inner: DBWALIterator,
 }
 
-impl Iterator for UpdateIterator {
+impl Iterator for UpdateBatchIterator {
   type Item = UpdateBatch;
   fn next(&mut self) -> Option<Self::Item> {
-    let result = self.inner.next();
-    if result.is_none() {
-      None
-    } else {
+    if let Some(result) = self.inner.next() {
       let (sn, b) = result.unwrap();
       let mut ub = UpdateBatch::new();
       ub.sn = sn;
       b.iterate(&mut ub);
       Some(ub)
+    } else {
+      None
     }
   }
 }
 
-impl UpdateIterator {
+impl UpdateBatchIterator {
   pub fn new(inner: DBWALIterator) -> Self {
-    UpdateIterator { inner }
+    UpdateBatchIterator { inner }
   }
 }

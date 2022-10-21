@@ -1,20 +1,30 @@
 use bytes::Bytes;
-use std::fmt::{Debug, Formatter, Result as FmtResult};
+use prost::{Message, Oneof};
 
-pub enum Update {
-  Put { key: Bytes, value: Bytes },
-  Delete { key: Bytes },
-  DeleteRange { from_key: Bytes, to_key: Bytes },
+#[derive(Clone, PartialEq, Message)]
+pub struct Put {
+  #[prost(bytes = "bytes", tag = "1")]
+  pub key: Bytes,
+  #[prost(bytes = "bytes", tag = "2")]
+  pub value: Bytes,
 }
 
-impl Debug for Update {
-  fn fmt(&self, f: &mut Formatter) -> FmtResult {
-    match self {
-      Update::Put { key, value } => write!(f, "Put {{key:{:?}, value:{:?}}}", key, value),
-      Update::Delete { key } => write!(f, "Delete {{key:{:?}}}", key),
-      Update::DeleteRange { from_key, to_key } => {
-        write!(f, "DeleteRange {{from_key:{:?}, to_key:{:?}}}", from_key, to_key)
-      }
-    }
-  }
+#[derive(Clone, PartialEq, Message)]
+pub struct Delete {
+  #[prost(bytes = "bytes", tag = "1")]
+  pub key: Bytes,
+}
+
+#[derive(Clone, PartialEq, Oneof)]
+pub enum Update {
+  #[prost(message, tag = "1")]
+  Put(Put),
+  #[prost(message, tag = "2")]
+  Delete(Delete),
+}
+
+#[derive(Clone, PartialEq, Message)]
+pub struct OptionalUpdate {
+  #[prost(oneof = "Update", tags = "1, 2, 3")]
+  pub update: Option<Update>,
 }
