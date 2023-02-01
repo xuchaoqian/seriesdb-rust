@@ -67,6 +67,26 @@ impl Db {
     self.inner.write(batch)
   }
 
+  pub fn insert_table(&self, name: &str, id: u32) -> Result<(), Error> {
+    let table_id = u32_to_table_id(id);
+
+    let seed_key = build_info_table_inner_key(SEED_ITEM_ID);
+    if let Some(seed_value) = self.inner.get(&seed_key)? {
+      let seed_value = u8s_to_u32(seed_value.as_ref());
+
+      if seed_value < id {
+        if u32_to_table_id(seed_value) >= MAX_USERLAND_TABLE_ID {
+          panic!("Exceeded limit: {:?}", MAX_USERLAND_TABLE_ID)
+        }
+        self.inner.put(&seed_key, table_id)?;
+      }
+    }
+
+    let name_to_id_table_inner_key = build_name_to_id_table_inner_key(name);
+    let id_to_name_table_inner_key = build_id_to_name_table_inner_key(table_id);
+    self.register_table(name_to_id_table_inner_key, table_id, id_to_name_table_inner_key, name)
+  }
+
   pub fn get_tables(&self) -> Vec<(String, u32)> {
     let mut result: Vec<(String, u32)> = Vec::new();
     let mut opts = ReadOptions::default();
@@ -354,6 +374,14 @@ fn test_generate_next_table_id() {
   run_test("test_generate_next_table_id", |db| {
     let id = db.generate_next_table_id().unwrap();
     assert_eq!(id, MIN_USERLAND_TABLE_ID);
+  })
+}
+
+#[test]
+fn test_insert_table() {
+  run_test("test_insert_table", |db| {
+    let result = db.insert_table("HUOBI:TRXUSDT.5m", 1055);
+    assert!(result.is_ok());
   })
 }
 
