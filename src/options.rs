@@ -49,6 +49,18 @@ impl Options {
     self.inner.set_max_background_jobs(num);
   }
 
+  pub fn set_wal_dir(&mut self, dir: &str) {
+    self.inner.set_wal_dir(dir);
+  }
+
+  pub fn set_wal_ttl_seconds(&mut self, secs: u64) {
+    self.inner.set_wal_ttl_seconds(secs);
+  }
+
+  pub fn set_wal_size_limit_mb(&mut self, size: u64) {
+    self.inner.set_wal_size_limit_mb(size);
+  }
+
   fn build_default_options() -> InnerOptions {
     let mut opts = InnerOptions::default();
     opts.create_if_missing(true);
