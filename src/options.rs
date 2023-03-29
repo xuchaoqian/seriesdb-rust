@@ -2,7 +2,7 @@ use crate::consts::*;
 use rocksdb::{DBCompactionStyle, Options as InnerOptions, SliceTransform};
 
 pub struct Options {
-  pub(in crate) inner: InnerOptions,
+  pub(crate) inner: InnerOptions,
 }
 
 impl Options {
@@ -47,6 +47,18 @@ impl Options {
 
   pub fn set_max_background_jobs(&mut self, num: i32) {
     self.inner.set_max_background_jobs(num);
+  }
+
+  pub fn set_wal_ttl_seconds(&mut self, num: u64) {
+    self.inner.set_wal_ttl_seconds(num);
+  }
+
+  pub fn set_wal_size_limit_mb(&mut self, num: u64) {
+    self.inner.set_wal_size_limit_mb(num);
+  }
+
+  pub fn set_wal_dir(&mut self, path: &str) {
+    self.inner.set_wal_dir(path);
   }
 
   fn build_default_options() -> InnerOptions {

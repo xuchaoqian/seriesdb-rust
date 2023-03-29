@@ -31,8 +31,7 @@ impl<'a> Table<'a> {
   pub fn put<K, V>(&self, key: K, value: V) -> Result<(), Error>
   where
     K: AsRef<[u8]>,
-    V: AsRef<[u8]>,
-  {
+    V: AsRef<[u8]>, {
     self.db.inner.put(build_inner_key(self.id, key), value)
   }
 

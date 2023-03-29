@@ -100,7 +100,7 @@ fn set_every_bit_to_one(key_len: u8) -> Bytes {
 /// unit test utils
 ////////////////////////////////////////////////////////////////////////////////
 #[cfg(test)]
-pub(in crate) fn run_test<T>(db_name: &str, test: T) -> ()
+pub(crate) fn run_test<T>(db_name: &str, test: T) -> ()
 where T: FnOnce(Db) -> () + std::panic::UnwindSafe {
   let mut path = String::from("./data/");
   path.push_str(db_name);
