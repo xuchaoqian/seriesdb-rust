@@ -1,13 +1,14 @@
 use crate::consts::*;
-use rocksdb::{DBCompactionStyle, Options as InnerOptions, SliceTransform};
+use rocksdb::{DBCompactionStyle, Options as RocksdbOptions, SliceTransform};
 
 pub struct Options {
-  pub(crate) inner: InnerOptions,
+  pub(crate) inner: RocksdbOptions,
+  pub(crate) cache_capacity: usize,
 }
 
 impl Options {
   pub fn new() -> Self {
-    Options { inner: Self::build_default_options() }
+    Options { inner: Self::build_default_rocksdb_options(), cache_capacity: 10240 }
   }
 
   pub fn set_table_cache_num_shard_bits(&mut self, num: i32) {
@@ -61,8 +62,12 @@ impl Options {
     self.inner.set_wal_dir(path);
   }
 
-  fn build_default_options() -> InnerOptions {
-    let mut opts = InnerOptions::default();
+  pub fn set_cache_capacity(&mut self, num: usize) {
+    self.cache_capacity = num;
+  }
+
+  fn build_default_rocksdb_options() -> RocksdbOptions {
+    let mut opts = RocksdbOptions::default();
     opts.create_if_missing(true);
     opts.set_prefix_extractor(SliceTransform::create_fixed_prefix(TABLE_ID_LEN));
     opts.set_max_open_files(-1);

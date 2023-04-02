@@ -1,6 +1,4 @@
 use crate::consts::*;
-#[cfg(test)]
-use crate::db::Db;
 use crate::types::*;
 use byteorder::{BigEndian, ByteOrder};
 use bytes::{Bytes, BytesMut};
@@ -52,7 +50,8 @@ pub fn build_id_to_name_table_inner_key(table_id: TableId) -> Bytes {
 pub fn build_delete_range_hint_table_inner_key<F, T>(from_key: F, to_key: T) -> Bytes
 where
   F: AsRef<[u8]>,
-  T: AsRef<[u8]>, {
+  T: AsRef<[u8]>,
+{
   let key = rmp_serde::to_vec(&(from_key.as_ref().to_vec(), to_key.as_ref().to_vec())).unwrap();
   build_inner_key(DELETE_RANGE_HINT_TABLE_ID, key)
 }
@@ -97,94 +96,126 @@ fn set_every_bit_to_one(key_len: u8) -> Bytes {
 }
 
 ////////////////////////////////////////////////////////////////////////////////
-/// unit test utils
+/// test utils
 ////////////////////////////////////////////////////////////////////////////////
-#[cfg(test)]
-pub(crate) fn run_test<T>(db_name: &str, test: T) -> ()
-where T: FnOnce(Db) -> () + std::panic::UnwindSafe {
-  let mut path = String::from("./data/");
-  path.push_str(db_name);
-  let db = setup(&path);
-  let result = std::panic::catch_unwind(|| {
-    test(db);
-  });
-  teardown(&path);
-  assert!(result.is_ok())
-}
 
+#[macro_use]
 #[cfg(test)]
-fn setup(path: &str) -> Db {
-  let result = Db::new(path, &crate::options::Options::new());
-  assert!(result.is_ok());
-  result.unwrap()
-}
+pub(crate) mod test_utils {
+  use crate::db::Db;
 
-#[cfg(test)]
-fn teardown(path: &str) {
-  assert!(Db::destroy(path).is_ok())
+  pub struct TestContext {
+    db: Option<Db>,
+    path: String,
+  }
+
+  impl Drop for TestContext {
+    fn drop(&mut self) {
+      let db = std::mem::replace(&mut self.db, None);
+      drop(db.unwrap());
+      let path = self.path.clone();
+      let result = Db::destroy(path);
+      assert!(result.is_ok())
+    }
+  }
+
+  impl TestContext {
+    pub fn new(db_name: &str) -> TestContext {
+      let mut path = String::from("./data/");
+      path.push_str(db_name);
+      let result = Db::new(path.clone(), &crate::options::Options::new());
+      assert!(result.is_ok());
+      TestContext { db: Some(result.unwrap()), path: path }
+    }
+
+    pub fn db(&self) -> &Db {
+      self.db.as_ref().unwrap()
+    }
+  }
+
+  #[macro_export]
+  macro_rules! setup {
+    ( $($param:expr),*; $($member:ident),* ) => {
+      let ctx = crate::utils::test_utils::TestContext::new(
+        $(
+          $param
+        )*
+      );
+      $(
+          let $member = ctx.$member();
+      )*
+    };
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
 /// test cases
 ////////////////////////////////////////////////////////////////////////////////
-#[test]
-fn test_build_info_table_inner_key() {
-  assert_eq!(build_info_table_inner_key([0, 0]), vec![0, 0, 0, 0, 0, 0]);
-}
+#[cfg(test)]
+mod tests {
+  use super::*;
 
-#[test]
-fn test_build_name_to_id_table_inner_key() {
-  assert_eq!(
-    build_name_to_id_table_inner_key("huobi.btc.usdt.1m"),
-    vec![0, 0, 0, 1, 104, 117, 111, 98, 105, 46, 98, 116, 99, 46, 117, 115, 100, 116, 46, 49, 109]
-  );
-}
+  #[test]
+  fn test_build_info_table_inner_key() {
+    assert_eq!(build_info_table_inner_key([0, 0]), vec![0, 0, 0, 0, 0, 0]);
+  }
 
-#[test]
-fn test_build_id_to_name_table_inner_key() {
-  assert_eq!(build_id_to_name_table_inner_key([0, 0, 4, 0]), vec![0, 0, 0, 2, 0, 0, 4, 0]);
-}
+  #[test]
+  fn test_build_name_to_id_table_inner_key() {
+    assert_eq!(
+      build_name_to_id_table_inner_key("huobi.btc.usdt.1m"),
+      vec![
+        0, 0, 0, 1, 104, 117, 111, 98, 105, 46, 98, 116, 99, 46, 117, 115, 100, 116, 46, 49, 109
+      ]
+    );
+  }
 
-#[test]
-fn test_build_delete_range_hint_table_inner_key() {
-  assert_eq!(
-    build_delete_range_hint_table_inner_key([0, 0, 4, 0], [0, 0, 4, 1]).as_ref(),
-    b"\0\0\0\x03\x92\x94\0\0\x04\0\x94\0\0\x04\x01"
-  );
-}
+  #[test]
+  fn test_build_id_to_name_table_inner_key() {
+    assert_eq!(build_id_to_name_table_inner_key([0, 0, 4, 0]), vec![0, 0, 0, 2, 0, 0, 4, 0]);
+  }
 
-#[test]
-fn test_extract_delete_range_hint() {
-  let inner_key = b"\0\0\0\x03\x92\x94\0\0\x04\0\x94\0\0\x04\x01";
-  let (from_key, to_key) = extract_delete_range_hint(inner_key);
-  assert_eq!(from_key.as_ref(), [0, 0, 4, 0]);
-  assert_eq!(to_key.as_ref(), [0, 0, 4, 1]);
-}
+  #[test]
+  fn test_build_delete_range_hint_table_inner_key() {
+    assert_eq!(
+      build_delete_range_hint_table_inner_key([0, 0, 4, 0], [0, 0, 4, 1]).as_ref(),
+      b"\0\0\0\x03\x92\x94\0\0\x04\0\x94\0\0\x04\x01"
+    );
+  }
 
-#[test]
-fn test_build_userland_table_anchor() {
-  assert_eq!(
-    build_userland_table_anchor([0, 0, 4, 0], 4),
-    vec![0, 0, 4, 0, 255, 255, 255, 255, 255]
-  );
-}
+  #[test]
+  fn test_extract_delete_range_hint() {
+    let inner_key = b"\0\0\0\x03\x92\x94\0\0\x04\0\x94\0\0\x04\x01";
+    let (from_key, to_key) = extract_delete_range_hint(inner_key);
+    assert_eq!(from_key.as_ref(), [0, 0, 4, 0]);
+    assert_eq!(to_key.as_ref(), [0, 0, 4, 1]);
+  }
 
-#[test]
-fn test_build_inner_key() {
-  let inner_key = build_inner_key([0, 0, 4, 0], [0, 0, 0, 0]);
-  assert_eq!(inner_key, vec![0, 0, 4, 0, 0, 0, 0, 0]);
-}
+  #[test]
+  fn test_build_userland_table_anchor() {
+    assert_eq!(
+      build_userland_table_anchor([0, 0, 4, 0], 4),
+      vec![0, 0, 4, 0, 255, 255, 255, 255, 255]
+    );
+  }
 
-#[test]
-fn test_extract_table_id() {
-  let inner_key = [0, 0, 4, 0, 0, 0, 0, 0];
-  let table_id = extract_table_id(inner_key);
-  assert_eq!(table_id, [0, 0, 4, 0]);
-}
+  #[test]
+  fn test_build_inner_key() {
+    let inner_key = build_inner_key([0, 0, 4, 0], [0, 0, 0, 0]);
+    assert_eq!(inner_key, vec![0, 0, 4, 0, 0, 0, 0, 0]);
+  }
 
-#[test]
-fn test_extract_key() {
-  let inner_key = [0, 0, 4, 0, 0, 0, 0, 128, 0, 254];
-  let table_id = extract_key(&inner_key);
-  assert_eq!(table_id, [0, 0, 0, 128, 0, 254]);
+  #[test]
+  fn test_extract_table_id() {
+    let inner_key = [0, 0, 4, 0, 0, 0, 0, 0];
+    let table_id = extract_table_id(inner_key);
+    assert_eq!(table_id, [0, 0, 4, 0]);
+  }
+
+  #[test]
+  fn test_extract_key() {
+    let inner_key = [0, 0, 4, 0, 0, 0, 0, 128, 0, 254];
+    let table_id = extract_key(&inner_key);
+    assert_eq!(table_id, [0, 0, 0, 128, 0, 254]);
+  }
 }

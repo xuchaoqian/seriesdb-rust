@@ -31,7 +31,8 @@ impl<'a> Table<'a> {
   pub fn put<K, V>(&self, key: K, value: V) -> Result<(), Error>
   where
     K: AsRef<[u8]>,
-    V: AsRef<[u8]>, {
+    V: AsRef<[u8]>,
+  {
     self.db.inner.put(build_inner_key(self.id, key), value)
   }
 
@@ -73,32 +74,34 @@ impl<'a> Table<'a> {
   }
 }
 
-#[test]
-fn test_put() {
-  run_test("test_put", |db| {
+#[cfg(test)]
+mod tests {
+  use crate::setup;
+
+  #[test]
+  fn test_put() {
+    setup!("test_put"; db);
     let name = "huobi.btc.usdt.1min";
     let table = db.new_table(name).unwrap();
     let result = table.put(b"k111", b"v111");
     assert!(result.is_ok());
-  })
-}
+  }
 
-#[allow(unused_must_use)]
-#[test]
-fn test_get() {
-  run_test("test_get", |db| {
+  #[allow(unused_must_use)]
+  #[test]
+  fn test_get() {
+    setup!("test_get"; db);
     let name = "huobi.btc.usdt.1min";
     let table = db.new_table(name).unwrap();
     table.put(b"k111", b"v111");
     let result = table.get(b"k111");
     assert_eq!(std::str::from_utf8(&result.unwrap().unwrap()).unwrap(), "v111");
-  })
-}
+  }
 
-#[allow(unused_must_use)]
-#[test]
-fn test_delete() {
-  run_test("test_delete", |db| {
+  #[allow(unused_must_use)]
+  #[test]
+  fn test_delete() {
+    setup!("test_delete"; db);
     let name = "huobi.btc.usdt.1min";
     let table = db.new_table(name).unwrap();
     table.put(b"k111", b"v111");
@@ -107,5 +110,5 @@ fn test_delete() {
     assert!(result.is_ok());
     let result = table.get(b"k111");
     assert!(result.unwrap().is_none());
-  })
+  }
 }

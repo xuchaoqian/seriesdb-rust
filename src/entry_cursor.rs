@@ -10,7 +10,7 @@ pub struct EntryCursor<'a> {
 }
 
 impl<'a> EntryCursor<'a> {
-  pub(in crate) fn new(inner: DBRawIterator<'a>, table_id: TableId, anchor: &'a Bytes) -> Self {
+  pub(crate) fn new(inner: DBRawIterator<'a>, table_id: TableId, anchor: &'a Bytes) -> Self {
     EntryCursor { inner, table_id, anchor }
   }
 
@@ -68,9 +68,13 @@ impl<'a> EntryCursor<'a> {
   }
 }
 
-#[test]
-fn test_seek() {
-  run_test("test_seek", |db| {
+#[cfg(test)]
+mod tests {
+  use crate::setup;
+
+  #[test]
+  fn test_seek() {
+    setup!("test_seek"; db);
     let name = "huobi.btc.usdt.1m";
     let table = db.new_table(name).unwrap();
     let k1 = b"k1";
@@ -86,5 +90,5 @@ fn test_seek() {
     iter.seek_to_first();
     assert!(iter.is_valid());
     assert_eq!(k1, iter.key().unwrap());
-  });
+  }
 }

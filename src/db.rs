@@ -8,33 +8,61 @@ use crate::update_batch_iterator::UpdateBatchIterator;
 use crate::utils::*;
 use crate::write_batch_x::WriteBatchX;
 use crate::Error;
-use rocksdb::DB as DbInner;
+use quick_cache::{sync::Cache, Weighter};
+use rocksdb::DB as RocksdbDb;
 use rocksdb::{ReadOptions, WriteBatch};
 use std::path::Path;
+use std::{num::NonZeroU32, sync::Arc};
 
 pub struct Db {
-  pub(crate) inner: DbInner,
+  pub(crate) inner: RocksdbDb,
+  cache: Cache<String, Arc<Table<'static>>, TableWeighter>,
+}
+
+#[derive(Clone)]
+struct TableWeighter;
+
+impl Weighter<String, (), Arc<Table<'static>>> for TableWeighter {
+  fn weight(&self, _key: &String, _qey: &(), val: &Arc<Table>) -> NonZeroU32 {
+    NonZeroU32::new(12 + val.anchor.len() as u32).unwrap()
+  }
 }
 
 impl Db {
   #[inline]
   pub fn new<P: AsRef<Path>>(path: P, opts: &Options) -> Result<Db, Error> {
-    Ok(Db { inner: DbInner::open(&opts.inner, path)? })
+    Ok(Db {
+      inner: RocksdbDb::open(&opts.inner, path)?,
+      cache: Cache::with_weighter(
+        opts.cache_capacity,
+        opts.cache_capacity as u64 * 20,
+        TableWeighter,
+      ),
+    })
   }
 
   #[inline]
   pub fn destroy<P: AsRef<Path>>(path: P) -> Result<(), Error> {
-    DbInner::destroy(&Options::new().inner, path)
+    RocksdbDb::destroy(&Options::new().inner, path)
   }
 
   #[inline]
-  pub fn new_table(&self, name: &str) -> Result<Table, Error> {
-    if let Some(id) = self.get_table_id_by_name(name)? {
-      Ok(Table { db: &self, id, anchor: build_userland_table_anchor(id, MAX_USERLAND_KEY_LEN) })
+  pub fn new_table(&self, name: &str) -> Result<Arc<Table>, Error> {
+    if let Some(table) = self.cache.get(name) {
+      return Ok(table);
     } else {
-      Ok(self.create_table(name)?)
+      let table = Arc::new(self.create_table(name)?);
+      // self.cache.insert(name.to_string(), table.clone());
+      return Ok(table);
     }
+
+    // if let Some(id) = self.get_table_id_by_name(name)? {
+    //   Ok(Table { db: &self, id, anchor: build_userland_table_anchor(id, MAX_USERLAND_KEY_LEN) })
+    // } else {
+    //   Ok(self.create_table(name)?)
+    // }
   }
+
   pub fn destroy_table(&self, name: &str) -> Result<(), Error> {
     let mut batch = WriteBatch::default();
     if let Some(id) = self.get_table_id_by_name(name)? {
@@ -185,14 +213,21 @@ impl Db {
   }
 }
 
-#[test]
-fn test_new_table() {
-  run_test("test_new_table", |db| assert!(db.new_table("huobi.btc.usdt.1min").is_ok()));
-}
+#[cfg(test)]
+mod tests {
 
-#[test]
-fn test_destroy_table() {
-  run_test("test_destroy_table", |db| {
+  use super::*;
+  use crate::setup;
+
+  #[test]
+  fn test_new_table() {
+    setup!("test_new_table"; db);
+    assert!(db.new_table("huobi.btc.usdt.1min").is_ok());
+  }
+
+  #[test]
+  fn test_destroy_table() {
+    setup!("test_destroy_table"; db);
     let name = "huobi.btc.usdt.1min";
     let table = db.new_table(name).unwrap();
     table.put(b"k111", b"v111").unwrap();
@@ -201,12 +236,11 @@ fn test_destroy_table() {
     db.destroy_table(name).unwrap();
     let result = table.get(b"k111");
     assert!(result.unwrap().is_none());
-  });
-}
+  }
 
-#[test]
-fn test_truncate_table() {
-  run_test("test_truncate_table", |db| {
+  #[test]
+  fn test_truncate_table() {
+    setup!("test_truncate_table"; db);
     let name = "huobi.btc.usdt.1min";
     let table = db.new_table(name).unwrap();
     table.put(b"k111", b"v111").unwrap();
@@ -215,12 +249,12 @@ fn test_truncate_table() {
     db.truncate_table(name).unwrap();
     let result = table.get(b"k111");
     assert!(result.unwrap().is_none());
-  });
-}
+  }
 
-#[test]
-fn test_rename_table() {
-  run_test("test_rename_table", |db| {
+  #[test]
+  fn test_rename_table() {
+    setup!("test_rename_table"; db);
+
     let old_name = "huobi.btc.usdt.1min";
     let new_name = "huobi.btc.usdt.5min";
     let table = db.new_table(old_name).unwrap();
@@ -237,12 +271,11 @@ fn test_rename_table() {
     let id_to_name_table_inner_key = build_id_to_name_table_inner_key(table.id);
     let name = table.db.inner.get(id_to_name_table_inner_key);
     assert_eq!(std::str::from_utf8(&name.unwrap().unwrap()).unwrap(), new_name);
-  });
-}
+  }
 
-#[test]
-fn test_get_tables() {
-  run_test("test_get_tables", |db| {
+  #[test]
+  fn test_get_tables() {
+    setup!("test_get_tables"; db);
     let name0 = "huobi.btc.usdt.1min".to_owned();
     let name1 = "huobi.btc.usdt.3min".to_owned();
     let name2 = "huobi.btc.usdt.5min".to_owned();
@@ -254,36 +287,33 @@ fn test_get_tables() {
     let id2 = table_id_to_u32(table2.id);
     let result = db.get_tables();
     assert_eq!(result, vec![(name0, id0), (name1, id1), (name2, id2)]);
-  });
-}
+  }
 
-#[test]
-fn test_get_table_id_by_name() {
-  run_test("test_get_table_id_by_name", |db| {
+  #[test]
+  fn test_get_table_id_by_name() {
+    setup!("test_get_table_id_by_name"; db);
     let table = db.create_table("huobi.btc.usdt.1m").unwrap();
     assert_eq!(table.id, MIN_USERLAND_TABLE_ID);
     assert_eq!(
       db.get_table_id_by_name("huobi.btc.usdt.1m").unwrap().unwrap(),
       MIN_USERLAND_TABLE_ID
     );
-  })
-}
+  }
 
-#[test]
-fn test_get_table_name_by_id() {
-  run_test("test_get_table_name_by_id", |db| {
+  #[test]
+  fn test_get_table_name_by_id() {
+    setup!("test_get_table_name_by_id"; db);
     let table = db.create_table("huobi.btc.usdt.1m").unwrap();
     assert_eq!(table.id, MIN_USERLAND_TABLE_ID);
     assert_eq!(
       db.get_table_name_by_id(MIN_USERLAND_TABLE_ID).unwrap().unwrap(),
       "huobi.btc.usdt.1m"
     );
-  })
-}
+  }
 
-#[test]
-fn test_get_latest_sn() {
-  run_test("test_get_latest_sn", |db| {
+  #[test]
+  fn test_get_latest_sn() {
+    setup!("test_get_latest_sn"; db);
     let table = db.create_table("huobi.btc.usdt.1m").unwrap();
     assert_eq!(table.id, MIN_USERLAND_TABLE_ID);
     let sn1 = db.get_latest_sn();
@@ -300,12 +330,12 @@ fn test_get_latest_sn() {
     table.write(batch).unwrap();
     let sn3 = db.get_latest_sn();
     assert_eq!(sn2 + 4, sn3);
-  })
-}
+  }
 
-#[test]
-fn test_get_updates_since() {
-  run_test("test_get_updates_since", |db| {
+  #[test]
+  fn test_get_updates_since() {
+    setup!("test_get_updates_since"; db);
+
     let sn0 = db.get_latest_sn();
     assert_eq!(sn0, 0);
 
@@ -340,30 +370,28 @@ fn test_get_updates_since() {
       result.push(ub.unwrap());
     }
     assert_eq!(format!("{:?}", result), "[UpdateBatch { sn: 2, updates: [OptionalUpdate { update: Some(Put(Put { key: b\"\\0\\0\\0\\0\\0\\0\", value: b\"\\0\\0\\x04\\0\" })) }] }, UpdateBatch { sn: 3, updates: [OptionalUpdate { update: Some(Put(Put { key: b\"\\0\\0\\0\\x01huobi.btc.usdt.1m\", value: b\"\\0\\0\\x04\\0\" })) }, OptionalUpdate { update: Some(Put(Put { key: b\"\\0\\0\\0\\x02\\0\\0\\x04\\0\", value: b\"huobi.btc.usdt.1m\" })) }] }, UpdateBatch { sn: 5, updates: [OptionalUpdate { update: Some(Put(Put { key: b\"\\0\\0\\0\\0\\0\\0\", value: b\"\\0\\0\\x04\\x01\" })) }] }, UpdateBatch { sn: 6, updates: [OptionalUpdate { update: Some(Put(Put { key: b\"\\0\\0\\0\\x01huobi.btc.usdt.3m\", value: b\"\\0\\0\\x04\\x01\" })) }, OptionalUpdate { update: Some(Put(Put { key: b\"\\0\\0\\0\\x02\\0\\0\\x04\\x01\", value: b\"huobi.btc.usdt.3m\" })) }] }, UpdateBatch { sn: 8, updates: [OptionalUpdate { update: Some(Delete(Delete { key: b\"\\0\\0\\0\\x01huobi.btc.usdt.3m\" })) }, OptionalUpdate { update: Some(Delete(Delete { key: b\"\\0\\0\\0\\x02\\0\\0\\x04\\x01\" })) }, OptionalUpdate { update: Some(Delete(Delete { key: b\"\\0\\0\\0\\x03\\x92\\x94\\0\\0\\x04\\x01\\x99\\0\\0\\x04\\x01\\xcc\\xff\\xcc\\xff\\xcc\\xff\\xcc\\xff\\xcc\\xff\" })) }] }, UpdateBatch { sn: 12, updates: [OptionalUpdate { update: Some(Put(Put { key: b\"\\0\\0\\x04\\x01k111\", value: b\"v111\" })) }] }, UpdateBatch { sn: 13, updates: [OptionalUpdate { update: Some(Delete(Delete { key: b\"\\0\\0\\x04\\x01k111\" })) }] }, UpdateBatch { sn: 14, updates: [OptionalUpdate { update: Some(Put(Put { key: b\"\\0\\0\\x04\\x01k112\", value: b\"v112\" })) }, OptionalUpdate { update: Some(Delete(Delete { key: b\"\\0\\0\\x04\\x01k111\" })) }, OptionalUpdate { update: Some(Delete(Delete { key: b\"\\0\\0\\0\\x03\\x92\\x94k111\\x94k112\" })) }] }]");
-  })
-}
+  }
 
-#[test]
-fn test_create_table() {
-  run_test("test_create_table", |db| {
+  #[test]
+  fn test_create_table() {
+    setup!("test_create_table"; db);
     let table = db.create_table("huobi.btc.usdt.1m").unwrap();
     assert_eq!(table.id, MIN_USERLAND_TABLE_ID);
     let table = db.create_table("huobi.btc.usdt.5m").unwrap();
     assert_eq!(table.id, [0, 0, 4, 1]);
-  })
-}
+  }
 
-#[test]
-fn test_generate_next_table_id() {
-  run_test("test_generate_next_table_id", |db| {
+  #[test]
+  fn test_generate_next_table_id() {
+    setup!("test_generate_next_table_id"; db);
     let id = db.generate_next_table_id().unwrap();
     assert_eq!(id, MIN_USERLAND_TABLE_ID);
-  })
-}
+  }
 
-#[test]
-fn test_register_table() {
-  run_test("test_register_table", |db| {
+  #[test]
+  fn test_register_table() {
+    setup!("test_register_table"; db);
+
     let name = "huobi.btc.usdt.1m";
     let name_clone = name.clone();
     let table = db.new_table(name).unwrap();
@@ -382,5 +410,5 @@ fn test_register_table() {
 
     let name = table.db.inner.get(id_to_name_table_inner_key);
     assert_eq!(std::str::from_utf8(&name.unwrap().unwrap()).unwrap(), "huobi.btc.usdt.1m");
-  })
+  }
 }
