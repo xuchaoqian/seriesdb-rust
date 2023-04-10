@@ -1,39 +1,41 @@
-use crate::db::Db;
+use std::fmt;
+use std::sync::Arc;
+
+use bytes::Bytes;
+use rocksdb::ReadOptions;
+use rocksdb::DB as RocksdbDb;
+
 use crate::entry_cursor::EntryCursor;
 use crate::types::*;
 use crate::utils::*;
 use crate::write_batch::WriteBatch;
 use crate::Error;
-use bytes::Bytes;
-use rocksdb::ReadOptions;
-use std::fmt;
 
 #[derive(Clone)]
-pub struct Table<'a> {
-  pub(crate) db: &'a Db,
+pub struct Table {
+  pub(crate) db_inner: Arc<RocksdbDb>,
   pub(crate) id: TableId,
   pub(crate) anchor: Bytes,
 }
 
-impl<'a> fmt::Debug for Table<'a> {
+impl fmt::Debug for Table {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
     write!(f, "id: {:?}, anchor: {:?}", self.id, self.anchor)
   }
 }
 
-impl<'a> Table<'a> {
+impl Table {
   #[inline]
-  pub(crate) fn new(db: &Db, id: TableId, anchor: Bytes) -> Table {
-    Table { db, id, anchor }
+  pub(crate) fn new(db_inner: Arc<RocksdbDb>, id: TableId, anchor: Bytes) -> Table {
+    Table { db_inner, id, anchor }
   }
 
   #[inline]
   pub fn put<K, V>(&self, key: K, value: V) -> Result<(), Error>
   where
     K: AsRef<[u8]>,
-    V: AsRef<[u8]>,
-  {
-    self.db.inner.put(build_inner_key(self.id, key), value)
+    V: AsRef<[u8]>, {
+    self.db_inner.put(build_inner_key(self.id, key), value)
   }
 
   #[inline]
@@ -43,29 +45,24 @@ impl<'a> Table<'a> {
 
   #[inline]
   pub fn write(&self, batch: WriteBatch) -> Result<(), Error> {
-    self.db.inner.write(batch.inner)
+    self.db_inner.write(batch.inner)
   }
 
   #[inline]
   pub fn delete<K: AsRef<[u8]>>(&self, key: K) -> Result<(), Error> {
-    self.db.inner.delete(build_inner_key(self.id, key))
+    self.db_inner.delete(build_inner_key(self.id, key))
   }
 
   #[inline]
   pub fn get<K: AsRef<[u8]>>(&self, key: K) -> Result<Option<Vec<u8>>, Error> {
-    self.db.inner.get(build_inner_key(self.id, key))
+    self.db_inner.get(build_inner_key(self.id, key))
   }
 
   #[inline]
   pub fn cursor(&self) -> EntryCursor {
     let mut opts = ReadOptions::default();
     opts.set_prefix_same_as_start(true);
-    EntryCursor::new(self.db.inner.raw_iterator_opt(opts), self.id, &self.anchor)
-  }
-
-  #[inline]
-  pub fn db(&self) -> &Db {
-    self.db
+    EntryCursor::new(self.db_inner.raw_iterator_opt(opts), self.id, &self.anchor)
   }
 
   #[inline]

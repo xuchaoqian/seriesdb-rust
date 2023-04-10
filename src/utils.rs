@@ -1,7 +1,8 @@
-use crate::consts::*;
-use crate::types::*;
 use byteorder::{BigEndian, ByteOrder};
 use bytes::{Bytes, BytesMut};
+
+use crate::consts::*;
+use crate::types::*;
 
 ////////////////////////////////////////////////////////////////////////////////
 /// conversion utils
@@ -37,8 +38,8 @@ pub fn build_info_table_inner_key(item_id: ItemId) -> Bytes {
 }
 
 #[inline]
-pub fn build_name_to_id_table_inner_key<N: AsRef<[u8]>>(name: N) -> Bytes {
-  build_inner_key(NAME_TO_ID_TABLE_ID, name)
+pub fn build_name_to_id_table_inner_key<N: AsRef<[u8]>>(table_name: N) -> Bytes {
+  build_inner_key(NAME_TO_ID_TABLE_ID, table_name)
 }
 
 #[inline]
@@ -46,21 +47,18 @@ pub fn build_id_to_name_table_inner_key(table_id: TableId) -> Bytes {
   build_inner_key(ID_TO_NAME_TABLE_ID, table_id)
 }
 
-#[inline]
-pub fn build_delete_range_hint_table_inner_key<F, T>(from_key: F, to_key: T) -> Bytes
-where
-  F: AsRef<[u8]>,
-  T: AsRef<[u8]>,
-{
-  let key = rmp_serde::to_vec(&(from_key.as_ref().to_vec(), to_key.as_ref().to_vec())).unwrap();
-  build_inner_key(DELETE_RANGE_HINT_TABLE_ID, key)
-}
+// #[inline]
+// pub fn build_delete_range_hint_table_inner_key<F, T>(from_key: F, to_key: T) -> Bytes
+// where
+//   F: AsRef<[u8]>,
+//   T: AsRef<[u8]>, {
+//   let key = rmp_serde::to_vec(&(from_key.as_ref().to_vec(), to_key.as_ref().to_vec())).unwrap();
+//   build_inner_key(DELETE_RANGE_HINT_TABLE_ID, key)
+// }
 
 #[inline]
-pub fn extract_delete_range_hint<K: AsRef<[u8]>>(inner_key: K) -> (Bytes, Bytes) {
-  let key = extract_key(inner_key.as_ref());
-  let (from_key, to_key): (Vec<u8>, Vec<u8>) = rmp_serde::from_slice(key).unwrap();
-  (Bytes::from(from_key), Bytes::from(to_key))
+pub(crate) fn build_id_to_name_table_anchor() -> Bytes {
+  build_inner_key(ID_TO_NAME_TABLE_ID, set_every_bit_to_one(TABLE_ID_LEN as u8 + 1))
 }
 
 #[inline]
@@ -77,6 +75,13 @@ pub fn build_inner_key<K: AsRef<[u8]>>(table_id: TableId, key: K) -> Bytes {
   buf.extend_from_slice(key);
   buf.freeze()
 }
+
+// #[inline]
+// pub fn extract_delete_range_hint<K: AsRef<[u8]>>(inner_key: K) -> (Bytes, Bytes) {
+//   let key = extract_key(inner_key.as_ref());
+//   let (from_key, to_key): (Vec<u8>, Vec<u8>) = rmp_serde::from_slice(key).unwrap();
+//   (Bytes::from(from_key), Bytes::from(to_key))
+// }
 
 #[inline]
 pub fn extract_table_id<B: AsRef<[u8]>>(buf: B) -> TableId {
@@ -175,21 +180,13 @@ mod tests {
     assert_eq!(build_id_to_name_table_inner_key([0, 0, 4, 0]), vec![0, 0, 0, 2, 0, 0, 4, 0]);
   }
 
-  #[test]
-  fn test_build_delete_range_hint_table_inner_key() {
-    assert_eq!(
-      build_delete_range_hint_table_inner_key([0, 0, 4, 0], [0, 0, 4, 1]).as_ref(),
-      b"\0\0\0\x03\x92\x94\0\0\x04\0\x94\0\0\x04\x01"
-    );
-  }
-
-  #[test]
-  fn test_extract_delete_range_hint() {
-    let inner_key = b"\0\0\0\x03\x92\x94\0\0\x04\0\x94\0\0\x04\x01";
-    let (from_key, to_key) = extract_delete_range_hint(inner_key);
-    assert_eq!(from_key.as_ref(), [0, 0, 4, 0]);
-    assert_eq!(to_key.as_ref(), [0, 0, 4, 1]);
-  }
+  // #[test]
+  // fn test_build_delete_range_hint_table_inner_key() {
+  //   assert_eq!(
+  //     build_delete_range_hint_table_inner_key([0, 0, 4, 0], [0, 0, 4, 1]).as_ref(),
+  //     b"\0\0\0\x03\x92\x94\0\0\x04\0\x94\0\0\x04\x01"
+  //   );
+  // }
 
   #[test]
   fn test_build_userland_table_anchor() {
@@ -204,6 +201,14 @@ mod tests {
     let inner_key = build_inner_key([0, 0, 4, 0], [0, 0, 0, 0]);
     assert_eq!(inner_key, vec![0, 0, 4, 0, 0, 0, 0, 0]);
   }
+
+  // #[test]
+  // fn test_extract_delete_range_hint() {
+  //   let inner_key = b"\0\0\0\x03\x92\x94\0\0\x04\0\x94\0\0\x04\x01";
+  //   let (from_key, to_key) = extract_delete_range_hint(inner_key);
+  //   assert_eq!(from_key.as_ref(), [0, 0, 4, 0]);
+  //   assert_eq!(to_key.as_ref(), [0, 0, 4, 1]);
+  // }
 
   #[test]
   fn test_extract_table_id() {

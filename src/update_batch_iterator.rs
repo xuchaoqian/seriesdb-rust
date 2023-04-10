@@ -1,6 +1,7 @@
+use rocksdb::DBWALIterator;
+
 use crate::update_batch::UpdateBatch;
 use crate::Error;
-use rocksdb::DBWALIterator;
 
 pub struct UpdateBatchIterator {
   inner: DBWALIterator,

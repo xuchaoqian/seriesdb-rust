@@ -1,7 +1,8 @@
-use crate::types::*;
-use crate::utils::*;
 use bytes::Bytes;
 use rocksdb::DBRawIterator;
+
+use crate::types::*;
+use crate::utils::*;
 
 pub struct EntryCursor<'a> {
   inner: DBRawIterator<'a>,
@@ -16,11 +17,12 @@ impl<'a> EntryCursor<'a> {
 
   #[inline]
   pub fn is_valid(&self) -> bool {
-    if self.inner.valid() {
-      return true;
-    } else {
-      return false;
-    }
+    self.inner.valid()
+  }
+
+  #[inline]
+  pub fn status(&self) -> Result<(), Error> {
+    self.inner.status()
   }
 
   #[inline]

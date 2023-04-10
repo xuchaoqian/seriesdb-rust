@@ -1,6 +1,7 @@
+use rocksdb::WriteBatch as WriteBatchInner;
+
 use crate::types::*;
 use crate::utils::*;
-use rocksdb::WriteBatch as WriteBatchInner;
 
 pub struct WriteBatchX {
   pub(crate) inner: WriteBatchInner,
@@ -30,7 +31,7 @@ impl WriteBatchX {
   where
     F: AsRef<[u8]>,
     T: AsRef<[u8]>, {
-    self.inner.delete(build_delete_range_hint_table_inner_key(&from_key, &to_key));
+    // self.inner.delete(build_delete_range_hint_table_inner_key(&from_key, &to_key));
     self.inner.delete_range(build_inner_key(table_id, from_key), build_inner_key(table_id, to_key))
   }
 }

@@ -1,5 +1,7 @@
-use crate::consts::*;
 use rocksdb::{DBCompactionStyle, Options as RocksdbOptions, SliceTransform};
+
+use crate::consts::*;
+use crate::utils::*;
 
 pub struct Options {
   pub(crate) inner: RocksdbOptions,
@@ -84,6 +86,34 @@ impl Options {
     opts.set_compaction_style(DBCompactionStyle::Level);
     opts.set_level_zero_file_num_compaction_trigger(4);
     opts.set_max_background_jobs(4);
+    opts.set_merge_operator_associative("merge_table_id", merge_operator);
     opts
+  }
+}
+
+pub(crate) fn merge_operator(
+  inner_key: &[u8], existing_val: Option<&[u8]>, operands: &rocksdb::MergeOperands,
+) -> Option<Vec<u8>> {
+  let table_id = extract_table_id(inner_key);
+  if table_id == NAME_TO_ID_TABLE_ID {
+    if operands.is_empty() {
+      return None;
+    }
+    if let Some(_table_id) = existing_val {
+      return None;
+    } else {
+      return Some(operands.iter().next().unwrap().to_vec());
+    }
+  } else if table_id == ID_TO_NAME_TABLE_ID {
+    if operands.is_empty() {
+      return None;
+    }
+    if let Some(_name) = existing_val {
+      return None;
+    } else {
+      return Some(operands.iter().next().unwrap().to_vec());
+    }
+  } else {
+    return None;
   }
 }

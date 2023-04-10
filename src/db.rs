@@ -1,3 +1,15 @@
+use std::{
+  num::NonZeroU32,
+  path::Path,
+  sync::{
+    atomic::{AtomicU32, Ordering},
+    Arc,
+  },
+};
+
+use quick_cache::{sync::Cache, Weighter};
+use rocksdb::{ReadOptions, WriteBatch, DB as RocksdbDb};
+
 use crate::consts::*;
 use crate::options::Options;
 use crate::table::Table;
@@ -8,21 +20,17 @@ use crate::update_batch_iterator::UpdateBatchIterator;
 use crate::utils::*;
 use crate::write_batch_x::WriteBatchX;
 use crate::Error;
-use quick_cache::{sync::Cache, Weighter};
-use rocksdb::DB as RocksdbDb;
-use rocksdb::{ReadOptions, WriteBatch};
-use std::path::Path;
-use std::{num::NonZeroU32, sync::Arc};
 
 pub struct Db {
-  pub(crate) inner: RocksdbDb,
-  cache: Cache<String, Arc<Table<'static>>, TableWeighter>,
+  inner: Arc<RocksdbDb>,
+  cache: Cache<String, Arc<Table>, TableWeighter>,
+  last_table_id: AtomicU32,
 }
 
 #[derive(Clone)]
 struct TableWeighter;
 
-impl Weighter<String, (), Arc<Table<'static>>> for TableWeighter {
+impl Weighter<String, (), Arc<Table>> for TableWeighter {
   fn weight(&self, _key: &String, _qey: &(), val: &Arc<Table>) -> NonZeroU32 {
     NonZeroU32::new(12 + val.anchor.len() as u32).unwrap()
   }
@@ -31,13 +39,17 @@ impl Weighter<String, (), Arc<Table<'static>>> for TableWeighter {
 impl Db {
   #[inline]
   pub fn new<P: AsRef<Path>>(path: P, opts: &Options) -> Result<Db, Error> {
+    let db_inner = Arc::new(RocksdbDb::open(&opts.inner, path)?);
+    Self::try_put_placeholder_to_fix_wal_bug(db_inner.clone())?;
+    let last_table_id = Self::get_last_table_id(db_inner.clone())?;
     Ok(Db {
-      inner: RocksdbDb::open(&opts.inner, path)?,
+      inner: db_inner,
       cache: Cache::with_weighter(
         opts.cache_capacity,
         opts.cache_capacity as u64 * 20,
         TableWeighter,
       ),
+      last_table_id: AtomicU32::new(last_table_id),
     })
   }
 
@@ -51,16 +63,18 @@ impl Db {
     if let Some(table) = self.cache.get(name) {
       return Ok(table);
     } else {
-      let table = Arc::new(self.create_table(name)?);
-      // self.cache.insert(name.to_string(), table.clone());
+      let table = Arc::new(if let Some(id) = self.get_table_id_by_name(name)? {
+        Table {
+          db_inner: Arc::clone(&self.inner),
+          id,
+          anchor: build_userland_table_anchor(id, MAX_USERLAND_KEY_LEN),
+        }
+      } else {
+        self.create_table(name)?
+      });
+      self.cache.insert(name.to_string(), table.clone());
       return Ok(table);
     }
-
-    // if let Some(id) = self.get_table_id_by_name(name)? {
-    //   Ok(Table { db: &self, id, anchor: build_userland_table_anchor(id, MAX_USERLAND_KEY_LEN) })
-    // } else {
-    //   Ok(self.create_table(name)?)
-    // }
   }
 
   pub fn destroy_table(&self, name: &str) -> Result<(), Error> {
@@ -69,17 +83,19 @@ impl Db {
       batch.delete(&build_name_to_id_table_inner_key(name));
       batch.delete(&build_id_to_name_table_inner_key(id));
       let anchor = build_userland_table_anchor(id, MAX_USERLAND_KEY_LEN);
-      batch.delete(&build_delete_range_hint_table_inner_key(&id, &anchor));
+      // batch.delete(&build_delete_range_hint_table_inner_key(&id, &anchor));
       batch.delete_range(id.as_ref(), anchor.as_ref());
     }
-    self.inner.write(batch)
+    let result = self.inner.write(batch);
+    self.cache.remove(name);
+    result
   }
 
   pub fn truncate_table(&self, name: &str) -> Result<(), Error> {
     let mut batch = WriteBatch::default();
     if let Some(id) = self.get_table_id_by_name(name)? {
       let anchor = build_userland_table_anchor(id, MAX_USERLAND_KEY_LEN);
-      batch.delete(&build_delete_range_hint_table_inner_key(&id, &anchor));
+      // batch.delete(&build_delete_range_hint_table_inner_key(&id, &anchor));
       batch.delete_range(id.as_ref(), anchor.as_ref());
     }
     self.inner.write(batch)
@@ -94,7 +110,9 @@ impl Db {
       batch.put(build_name_to_id_table_inner_key(new_name), id);
       batch.put(id_to_name_table_inner_key, new_name);
     }
-    self.inner.write(batch)
+    let result = self.inner.write(batch);
+    self.cache.remove(old_name);
+    result
   }
 
   pub fn get_tables(&self) -> Vec<(String, u32)> {
@@ -156,6 +174,10 @@ impl Db {
           match update {
             Update::Put(put) => batch.put(put.key, put.value),
             Update::Delete(delete) => batch.delete(delete.key),
+            Update::DeleteRange(delete_range) => {
+              batch.delete_range(delete_range.begin_key, delete_range.end_key)
+            }
+            Update::Merge(merge) => batch.merge(merge.key, merge.value),
           }
         }
       }
@@ -180,25 +202,41 @@ impl Db {
     let id_to_name_table_inner_key = build_id_to_name_table_inner_key(id);
     self.register_table(name_to_id_table_inner_key, id, id_to_name_table_inner_key, name)?;
     let anchor = build_userland_table_anchor(id, MAX_USERLAND_KEY_LEN);
-    Ok(Table::new(&self, id, anchor))
+    Ok(Table::new(self.inner.clone(), id, anchor))
   }
 
   fn generate_next_table_id(&self) -> Result<TableId, Error> {
-    let seed_key = build_info_table_inner_key(SEED_ITEM_ID);
-    if let Some(seed_value) = self.inner.get(&seed_key)? {
-      let seed_value = u8s_to_u32(seed_value.as_ref());
-      if u32_to_table_id(seed_value) >= MAX_USERLAND_TABLE_ID {
-        panic!("Exceeded limit: {:?}", MAX_USERLAND_TABLE_ID)
-      }
-      let seed_value = seed_value + 1;
-      let next_id = u32_to_table_id(seed_value);
-      self.inner.put(&seed_key, next_id)?;
-      Ok(next_id)
+    let curr_table_id = u32_to_table_id(self.last_table_id.fetch_add(1, Ordering::SeqCst) + 1);
+    if curr_table_id >= MAX_USERLAND_TABLE_ID {
+      panic!("Exceeded limit: {:?}", MAX_USERLAND_TABLE_ID)
+    }
+    Ok(curr_table_id)
+  }
+
+  #[inline]
+  fn try_put_placeholder_to_fix_wal_bug(db_inner: Arc<RocksdbDb>) -> Result<(), Error> {
+    let inner_key = build_info_table_inner_key(PLACEHOLDER_ITEM_ID);
+    let inner_value = db_inner.get(&inner_key)?;
+    if inner_value.is_none() {
+      db_inner.put(inner_key, PLACEHOLDER_ITEM_ID)
     } else {
-      // Double write to fixed raw get_updates_since bug.
-      self.inner.put(&seed_key, MIN_USERLAND_TABLE_ID)?;
-      self.inner.put(&seed_key, MIN_USERLAND_TABLE_ID)?;
-      Ok(MIN_USERLAND_TABLE_ID)
+      Ok(())
+    }
+  }
+
+  #[inline]
+  fn get_last_table_id(db_inner: Arc<RocksdbDb>) -> Result<u32, Error> {
+    let anchor = build_id_to_name_table_anchor();
+    let id_to_name_table = Table::new(db_inner.clone(), ID_TO_NAME_TABLE_ID, anchor);
+    let mut cusor = id_to_name_table.cursor();
+    cusor.seek_to_last();
+    if cusor.is_valid() {
+      Ok(u8s_to_u32(cusor.key().unwrap()))
+    } else {
+      match cusor.status() {
+        Ok(_) => Ok(table_id_to_u32(MIN_USERLAND_TABLE_ID) - 1),
+        Err(e) => Err(e),
+      }
     }
   }
 
@@ -207,8 +245,8 @@ impl Db {
     &self, name_to_id_table_inner_key: K, id: TableId, id_to_name_table_inner_key: K, name: &str,
   ) -> Result<(), Error> {
     let mut batch = WriteBatch::default();
-    batch.put(name_to_id_table_inner_key, id);
-    batch.put(id_to_name_table_inner_key, name);
+    batch.merge(name_to_id_table_inner_key, id);
+    batch.merge(id_to_name_table_inner_key, name);
     self.inner.write(batch)
   }
 }
@@ -261,15 +299,15 @@ mod tests {
     assert!(db.rename_table(old_name, new_name).is_ok());
 
     let old_name_to_id_table_inner_key = build_name_to_id_table_inner_key(&old_name);
-    let id = table.db.inner.get(old_name_to_id_table_inner_key);
+    let id = table.db_inner.get(old_name_to_id_table_inner_key);
     assert!(id.unwrap().is_none());
 
     let new_name_to_id_table_inner_key = build_name_to_id_table_inner_key(&new_name);
-    let id = table.db.inner.get(new_name_to_id_table_inner_key);
+    let id = table.db_inner.get(new_name_to_id_table_inner_key);
     assert_eq!(id.unwrap().unwrap().as_ref(), table.id);
 
     let id_to_name_table_inner_key = build_id_to_name_table_inner_key(table.id);
-    let name = table.db.inner.get(id_to_name_table_inner_key);
+    let name = table.db_inner.get(id_to_name_table_inner_key);
     assert_eq!(std::str::from_utf8(&name.unwrap().unwrap()).unwrap(), new_name);
   }
 
@@ -329,7 +367,7 @@ mod tests {
     batch.delete_range(b"k111", b"k112");
     table.write(batch).unwrap();
     let sn3 = db.get_latest_sn();
-    assert_eq!(sn2 + 4, sn3);
+    assert_eq!(sn2 + 3, sn3);
   }
 
   #[test]
@@ -337,39 +375,42 @@ mod tests {
     setup!("test_get_updates_since"; db);
 
     let sn0 = db.get_latest_sn();
-    assert_eq!(sn0, 0);
+    assert_eq!(sn0, 1);
 
-    let table = db.create_table("huobi.btc.usdt.1m").unwrap();
+    let table = db.create_table("huobi.btc.usdt.1m").unwrap(); // 2 records
     assert_eq!(table.id, MIN_USERLAND_TABLE_ID);
-    let table = db.create_table("huobi.btc.usdt.3m").unwrap();
-    db.destroy_table("huobi.btc.usdt.3m").unwrap();
+    let table = db.create_table("huobi.btc.usdt.3m").unwrap(); // 2 records
+    db.destroy_table("huobi.btc.usdt.3m").unwrap(); // 3 records
 
     let sn1 = db.get_latest_sn();
-    assert_eq!(sn0 + 11, sn1);
+    assert_eq!(sn1, 8);
+    assert_eq!(sn0 + 7, sn1);
 
-    let result = table.put(b"k111", b"v111");
+    let result = table.put(b"k111", b"v111"); // 1 record
     assert!(result.is_ok());
-    let result = table.delete(b"k111");
+    let result = table.delete(b"k111"); // 1 record
     assert!(result.is_ok());
 
     let sn2 = db.get_latest_sn();
+    assert_eq!(sn2, 10);
     assert_eq!(sn1 + 2, sn2);
 
     let mut batch = table.write_batch();
-    batch.put(b"k112", b"v112");
-    batch.delete(b"k111");
-    batch.delete_range(b"k111", b"k112");
+    batch.put(b"k112", b"v112"); // 1 record
+    batch.delete(b"k111"); // 1 record
+    batch.delete_range(b"k111", b"k112"); // 1 record
     table.write(batch).unwrap();
 
     let sn3 = db.get_latest_sn();
-    assert_eq!(sn2 + 4, sn3);
+    assert_eq!(sn3, 13);
+    assert_eq!(sn2 + 3, sn3);
 
     let iter = db.get_updates_since(0).unwrap();
     let mut result = vec![];
     for ub in iter {
       result.push(ub.unwrap());
     }
-    assert_eq!(format!("{:?}", result), "[UpdateBatch { sn: 2, updates: [OptionalUpdate { update: Some(Put(Put { key: b\"\\0\\0\\0\\0\\0\\0\", value: b\"\\0\\0\\x04\\0\" })) }] }, UpdateBatch { sn: 3, updates: [OptionalUpdate { update: Some(Put(Put { key: b\"\\0\\0\\0\\x01huobi.btc.usdt.1m\", value: b\"\\0\\0\\x04\\0\" })) }, OptionalUpdate { update: Some(Put(Put { key: b\"\\0\\0\\0\\x02\\0\\0\\x04\\0\", value: b\"huobi.btc.usdt.1m\" })) }] }, UpdateBatch { sn: 5, updates: [OptionalUpdate { update: Some(Put(Put { key: b\"\\0\\0\\0\\0\\0\\0\", value: b\"\\0\\0\\x04\\x01\" })) }] }, UpdateBatch { sn: 6, updates: [OptionalUpdate { update: Some(Put(Put { key: b\"\\0\\0\\0\\x01huobi.btc.usdt.3m\", value: b\"\\0\\0\\x04\\x01\" })) }, OptionalUpdate { update: Some(Put(Put { key: b\"\\0\\0\\0\\x02\\0\\0\\x04\\x01\", value: b\"huobi.btc.usdt.3m\" })) }] }, UpdateBatch { sn: 8, updates: [OptionalUpdate { update: Some(Delete(Delete { key: b\"\\0\\0\\0\\x01huobi.btc.usdt.3m\" })) }, OptionalUpdate { update: Some(Delete(Delete { key: b\"\\0\\0\\0\\x02\\0\\0\\x04\\x01\" })) }, OptionalUpdate { update: Some(Delete(Delete { key: b\"\\0\\0\\0\\x03\\x92\\x94\\0\\0\\x04\\x01\\x99\\0\\0\\x04\\x01\\xcc\\xff\\xcc\\xff\\xcc\\xff\\xcc\\xff\\xcc\\xff\" })) }] }, UpdateBatch { sn: 12, updates: [OptionalUpdate { update: Some(Put(Put { key: b\"\\0\\0\\x04\\x01k111\", value: b\"v111\" })) }] }, UpdateBatch { sn: 13, updates: [OptionalUpdate { update: Some(Delete(Delete { key: b\"\\0\\0\\x04\\x01k111\" })) }] }, UpdateBatch { sn: 14, updates: [OptionalUpdate { update: Some(Put(Put { key: b\"\\0\\0\\x04\\x01k112\", value: b\"v112\" })) }, OptionalUpdate { update: Some(Delete(Delete { key: b\"\\0\\0\\x04\\x01k111\" })) }, OptionalUpdate { update: Some(Delete(Delete { key: b\"\\0\\0\\0\\x03\\x92\\x94k111\\x94k112\" })) }] }]");
+    assert_eq!(format!("{:?}", result), "[UpdateBatch { sn: 2, updates: [OptionalUpdate { update: Some(Merge(Merge { key: b\"\\0\\0\\0\\x01huobi.btc.usdt.1m\", value: b\"\\0\\0\\x04\\0\" })) }, OptionalUpdate { update: Some(Merge(Merge { key: b\"\\0\\0\\0\\x02\\0\\0\\x04\\0\", value: b\"huobi.btc.usdt.1m\" })) }] }, UpdateBatch { sn: 4, updates: [OptionalUpdate { update: Some(Merge(Merge { key: b\"\\0\\0\\0\\x01huobi.btc.usdt.3m\", value: b\"\\0\\0\\x04\\x01\" })) }, OptionalUpdate { update: Some(Merge(Merge { key: b\"\\0\\0\\0\\x02\\0\\0\\x04\\x01\", value: b\"huobi.btc.usdt.3m\" })) }] }, UpdateBatch { sn: 6, updates: [OptionalUpdate { update: Some(Delete(Delete { key: b\"\\0\\0\\0\\x01huobi.btc.usdt.3m\" })) }, OptionalUpdate { update: Some(Delete(Delete { key: b\"\\0\\0\\0\\x02\\0\\0\\x04\\x01\" })) }, OptionalUpdate { update: Some(DeleteRange(DeleteRange { begin_key: b\"\\0\\0\\x04\\x01\", end_key: b\"\\0\\0\\x04\\x01\\xff\\xff\\xff\\xff\\xff\" })) }] }, UpdateBatch { sn: 9, updates: [OptionalUpdate { update: Some(Put(Put { key: b\"\\0\\0\\x04\\x01k111\", value: b\"v111\" })) }] }, UpdateBatch { sn: 10, updates: [OptionalUpdate { update: Some(Delete(Delete { key: b\"\\0\\0\\x04\\x01k111\" })) }] }, UpdateBatch { sn: 11, updates: [OptionalUpdate { update: Some(Put(Put { key: b\"\\0\\0\\x04\\x01k112\", value: b\"v112\" })) }, OptionalUpdate { update: Some(Delete(Delete { key: b\"\\0\\0\\x04\\x01k111\" })) }, OptionalUpdate { update: Some(DeleteRange(DeleteRange { begin_key: b\"\\0\\0\\x04\\x01k111\", end_key: b\"\\0\\0\\x04\\x01k112\" })) }] }]");
   }
 
   #[test]
@@ -405,10 +446,10 @@ mod tests {
     );
     assert!(result.is_ok());
 
-    let id = table.db.inner.get(name_to_id_table_inner_key);
+    let id = table.db_inner.get(name_to_id_table_inner_key);
     assert_eq!(id.unwrap().unwrap().as_ref(), [0, 0, 4, 0]);
 
-    let name = table.db.inner.get(id_to_name_table_inner_key);
+    let name = table.db_inner.get(id_to_name_table_inner_key);
     assert_eq!(std::str::from_utf8(&name.unwrap().unwrap()).unwrap(), "huobi.btc.usdt.1m");
   }
 }
