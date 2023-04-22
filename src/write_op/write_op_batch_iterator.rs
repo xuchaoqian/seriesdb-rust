@@ -1,27 +1,27 @@
 use rocksdb::DBWALIterator;
 
-use crate::update_batch::UpdateBatch;
-use crate::Error;
+use super::write_op_batch::WriteOpBatch;
+use crate::error::Error;
 
-pub struct UpdateBatchIterator {
+pub struct WriteOpBatchIterator {
   inner: DBWALIterator,
 }
 
-impl Iterator for UpdateBatchIterator {
-  type Item = Result<UpdateBatch, Error>;
+impl Iterator for WriteOpBatchIterator {
+  type Item = Result<WriteOpBatch, Error>;
 
   fn next(&mut self) -> Option<Self::Item> {
     match self.inner.next() {
       Some(result) => {
         match result {
           Ok((sn, batch_inner)) => {
-            let mut batch = UpdateBatch::new();
+            let mut batch = WriteOpBatch::new();
             batch.sn = sn;
             batch_inner.iterate(&mut batch);
             return Some(Ok(batch));
           }
           Err(err) => {
-            return Some(Err(err));
+            return Some(Err(Error::RocksdbError(err)));
           }
         };
       }
@@ -30,8 +30,8 @@ impl Iterator for UpdateBatchIterator {
   }
 }
 
-impl UpdateBatchIterator {
+impl WriteOpBatchIterator {
   pub fn new(inner: DBWALIterator) -> Self {
-    UpdateBatchIterator { inner }
+    WriteOpBatchIterator { inner }
   }
 }

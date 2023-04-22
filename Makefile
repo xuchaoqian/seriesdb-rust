@@ -12,6 +12,9 @@ release:
 test:
 	RUST_BACKTRACE=1 ${CARGO} test -- --nocapture
 
+bench:
+	RUST_BACKTRACE=1 ${CARGO} bench -- --nocapture
+
 fmt:
 	${CARGO_NIGHTLY} fmt
 

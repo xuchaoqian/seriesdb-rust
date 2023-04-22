@@ -2,49 +2,49 @@ use bytes::Bytes;
 use prost::{Message, Oneof};
 
 #[derive(Clone, PartialEq, Message)]
-pub struct Put {
+pub struct PutOp {
   #[prost(bytes = "bytes", tag = "1")]
-  pub key: Bytes,
+  pub inner_key: Bytes,
   #[prost(bytes = "bytes", tag = "2")]
-  pub value: Bytes,
+  pub inner_value: Bytes,
 }
 
 #[derive(Clone, PartialEq, Message)]
-pub struct Delete {
+pub struct DeleteOp {
   #[prost(bytes = "bytes", tag = "1")]
-  pub key: Bytes,
+  pub inner_key: Bytes,
 }
 
 #[derive(Clone, PartialEq, Message)]
-pub struct DeleteRange {
+pub struct DeleteRangeOp {
   #[prost(bytes = "bytes", tag = "1")]
-  pub begin_key: Bytes,
+  pub begin_inner_key: Bytes,
   #[prost(bytes = "bytes", tag = "2")]
-  pub end_key: Bytes,
+  pub end_inner_key: Bytes,
 }
 
 #[derive(Clone, PartialEq, Message)]
-pub struct Merge {
+pub struct MergeOp {
   #[prost(bytes = "bytes", tag = "1")]
-  pub key: Bytes,
+  pub inner_key: Bytes,
   #[prost(bytes = "bytes", tag = "2")]
-  pub value: Bytes,
+  pub inner_value: Bytes,
 }
 
 #[derive(Clone, PartialEq, Oneof)]
-pub enum Update {
+pub enum WriteOp {
   #[prost(message, tag = "1")]
-  Put(Put),
+  PutOp(PutOp),
   #[prost(message, tag = "2")]
-  Delete(Delete),
+  DeleteOp(DeleteOp),
   #[prost(message, tag = "3")]
-  DeleteRange(DeleteRange),
+  DeleteRangeOp(DeleteRangeOp),
   #[prost(message, tag = "4")]
-  Merge(Merge),
+  MergeOp(MergeOp),
 }
 
 #[derive(Clone, PartialEq, Message)]
-pub struct OptionalUpdate {
-  #[prost(oneof = "Update", tags = "1, 2, 3, 4")]
-  pub update: Option<Update>,
+pub struct OptionalWriteOp {
+  #[prost(oneof = "WriteOp", tags = "1, 2, 3, 4")]
+  pub inner: Option<WriteOp>,
 }

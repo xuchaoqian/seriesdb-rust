@@ -1,14 +1,22 @@
-mod consts;
+pub(crate) mod compact_filter;
+pub(crate) mod consts;
+pub mod cursor;
 pub mod db;
-pub mod entry_cursor;
+pub mod error;
 pub mod options;
 pub mod table;
 pub mod types;
-pub mod update;
-pub mod update_batch;
-pub mod update_batch_iterator;
-pub mod utils;
+pub(crate) mod utils;
 pub mod write_batch;
-pub mod write_batch_x;
+pub mod write_op;
 
-pub use types::*;
+pub mod prelude {
+  pub use crate::cursor::*;
+  pub use crate::db::*;
+  pub use crate::error::*;
+  pub use crate::options::*;
+  pub use crate::table::*;
+  pub use crate::types::*;
+  pub use crate::write_batch::*;
+  pub use crate::write_op::*;
+}

@@ -5,12 +5,23 @@ authors = ["Chaoqian Xu <chaoranxu@gmail.com>"]
 edition = "2021"
 
 [dependencies]
-rocksdb = { git = "https://github.com/xuchaoqian/rust-rocksdb.git", branch = "more-apis-for-writebatch-handler", features = [
-    "multi-threaded-cf",
-] }
 bytes = "1.4.0"
 byteorder = "1.4.3"
 serde = "1.0.159"
 rmp-serde = "1.1.1"
 prost = "0.11.8"
+chrono = "0.4.24"
+parking_lot = "0.12"
+thiserror = "1.0.40"
 quick_cache = "0.2.4"
+concurrent-initializer = { git = "https://github.com/xuchaoqian/concurrent-initializer-rust.git", branch = "main" }
+rocksdb = { git = "https://github.com/xuchaoqian/rust-rocksdb.git", branch = "more-apis-for-writebatch-handler", features = [
+    "multi-threaded-cf",
+] }
+
+[dev-dependencies]
+criterion = { version = "0.4", features = ["html_reports"] }
+
+[[bench]]
+name = "seriesdb_bench"
+harness = false

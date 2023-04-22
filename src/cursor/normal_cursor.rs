@@ -1,62 +1,60 @@
 use bytes::Bytes;
 use rocksdb::DBRawIterator;
 
+use crate::cursor::*;
+use crate::error::Error;
 use crate::types::*;
 use crate::utils::*;
 
-pub struct EntryCursor<'a> {
+pub struct NormalCursor<'a> {
   inner: DBRawIterator<'a>,
   table_id: TableId,
   anchor: &'a Bytes,
 }
 
-impl<'a> EntryCursor<'a> {
-  pub(crate) fn new(inner: DBRawIterator<'a>, table_id: TableId, anchor: &'a Bytes) -> Self {
-    EntryCursor { inner, table_id, anchor }
-  }
-
+impl<'a> Cursor for NormalCursor<'a> {
   #[inline]
-  pub fn is_valid(&self) -> bool {
+  fn is_valid(&self) -> bool {
     self.inner.valid()
   }
 
   #[inline]
-  pub fn status(&self) -> Result<(), Error> {
-    self.inner.status()
+  fn status(&self) -> Result<(), Error> {
+    Ok(self.inner.status()?)
   }
 
   #[inline]
-  pub fn seek_to_first(&mut self) {
+  fn seek_to_first(&mut self) {
     self.inner.seek(self.table_id)
   }
 
   #[inline]
-  pub fn seek_to_last(&mut self) {
+  fn seek_to_last(&mut self) {
     self.inner.seek_for_prev(self.anchor);
   }
 
   #[inline]
-  pub fn seek<K: AsRef<[u8]>>(&mut self, key: K) {
+  fn seek<K: AsRef<[u8]>>(&mut self, key: K) {
     self.inner.seek(build_inner_key(self.table_id, key));
   }
 
   #[inline]
-  pub fn seek_for_prev<K: AsRef<[u8]>>(&mut self, key: K) {
+  fn seek_for_prev<K: AsRef<[u8]>>(&mut self, key: K) {
     self.inner.seek_for_prev(build_inner_key(self.table_id, key));
   }
 
   #[inline]
-  pub fn next(&mut self) {
+  fn next(&mut self) {
     self.inner.next()
   }
 
   #[inline]
-  pub fn prev(&mut self) {
+  fn prev(&mut self) {
     self.inner.prev()
   }
 
   #[inline]
-  pub fn key(&self) -> Option<&[u8]> {
+  fn key(&self) -> Option<&[u8]> {
     if let Some(v) = self.inner.key() {
       Some(extract_key(v))
     } else {
@@ -65,20 +63,29 @@ impl<'a> EntryCursor<'a> {
   }
 
   #[inline]
-  pub fn value(&self) -> Option<&[u8]> {
+  fn value(&self) -> Option<&[u8]> {
     self.inner.value()
+  }
+}
+
+impl<'a> NormalCursor<'a> {
+  pub(crate) fn new(inner: DBRawIterator<'a>, table_id: TableId, anchor: &'a Bytes) -> Self {
+    NormalCursor { inner, table_id, anchor }
   }
 }
 
 #[cfg(test)]
 mod tests {
+  use crate::cursor::*;
+  use crate::db::*;
   use crate::setup;
+  use crate::table::*;
 
   #[test]
   fn test_seek() {
-    setup!("test_seek"; db);
+    setup!("normal_cursor.test_seek"; db);
     let name = "huobi.btc.usdt.1m";
-    let table = db.new_table(name).unwrap();
+    let table = db.open_table(name).unwrap();
     let k1 = b"k1";
     let v1 = b"v1";
     let k2 = b"k2";
