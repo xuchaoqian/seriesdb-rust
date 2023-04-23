@@ -30,6 +30,11 @@ impl Table for TtlTable {
   type Cursor<'a> = TtlCursor<'a>;
   type WriteBatch = TtlWriteBatch;
 
+  #[inline(always)]
+  fn id(&self) -> TableId {
+    self.id
+  }
+
   #[inline]
   fn put<K, V>(&self, key: K, value: V) -> Result<(), Error>
   where
@@ -73,11 +78,6 @@ impl Table for TtlTable {
     let mut opts = ReadOptions::default();
     opts.set_prefix_same_as_start(true);
     TtlCursor::new(self.inner_db.raw_iterator_opt(opts), self.id, &self.anchor)
-  }
-
-  #[inline]
-  fn id(&self) -> TableId {
-    self.id
   }
 }
 

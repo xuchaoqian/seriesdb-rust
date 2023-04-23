@@ -2,66 +2,41 @@ use bytes::Bytes;
 use rocksdb::DBRawIterator;
 
 use crate::cursor::*;
-use crate::error::Error;
 use crate::types::*;
-use crate::utils::*;
 
 pub struct NormalCursor<'a> {
-  inner: DBRawIterator<'a>,
-  table_id: TableId,
-  anchor: &'a Bytes,
+  pub(crate) inner: DBRawIterator<'a>,
+  pub(crate) table_id: TableId,
+  pub(crate) anchor: &'a Bytes,
 }
 
-impl<'a> Cursor for NormalCursor<'a> {
-  #[inline]
-  fn is_valid(&self) -> bool {
-    self.inner.valid()
+impl<'a> Cursor<'a> for NormalCursor<'a> {
+  ////////////////////////////////////////////////////////////////////////////////
+  /// Getters
+  ////////////////////////////////////////////////////////////////////////////////
+  #[inline(always)]
+  fn inner(&self) -> &DBRawIterator<'a> {
+    &self.inner
   }
 
-  #[inline]
-  fn status(&self) -> Result<(), Error> {
-    Ok(self.inner.status()?)
+  #[inline(always)]
+  fn inner_mut(&mut self) -> &mut DBRawIterator<'a> {
+    &mut self.inner
   }
 
-  #[inline]
-  fn seek_to_first(&mut self) {
-    self.inner.seek(self.table_id)
+  #[inline(always)]
+  fn table_id(&self) -> TableId {
+    self.table_id
   }
 
-  #[inline]
-  fn seek_to_last(&mut self) {
-    self.inner.seek_for_prev(self.anchor);
+  #[inline(always)]
+  fn anchor(&self) -> &'a Bytes {
+    &self.anchor
   }
 
-  #[inline]
-  fn seek<K: AsRef<[u8]>>(&mut self, key: K) {
-    self.inner.seek(build_inner_key(self.table_id, key));
-  }
-
-  #[inline]
-  fn seek_for_prev<K: AsRef<[u8]>>(&mut self, key: K) {
-    self.inner.seek_for_prev(build_inner_key(self.table_id, key));
-  }
-
-  #[inline]
-  fn next(&mut self) {
-    self.inner.next()
-  }
-
-  #[inline]
-  fn prev(&mut self) {
-    self.inner.prev()
-  }
-
-  #[inline]
-  fn key(&self) -> Option<&[u8]> {
-    if let Some(v) = self.inner.key() {
-      Some(extract_key(v))
-    } else {
-      None
-    }
-  }
-
+  ////////////////////////////////////////////////////////////////////////////////
+  /// APIs
+  ////////////////////////////////////////////////////////////////////////////////
   #[inline]
   fn value(&self) -> Option<&[u8]> {
     self.inner.value()
@@ -69,7 +44,7 @@ impl<'a> Cursor for NormalCursor<'a> {
 }
 
 impl<'a> NormalCursor<'a> {
-  pub(crate) fn new(inner: DBRawIterator<'a>, table_id: TableId, anchor: &'a Bytes) -> Self {
+  pub fn new(inner: DBRawIterator<'a>, table_id: TableId, anchor: &'a Bytes) -> Self {
     NormalCursor { inner, table_id, anchor }
   }
 }

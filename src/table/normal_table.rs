@@ -29,6 +29,11 @@ impl Table for NormalTable {
   type Cursor<'a> = NormalCursor<'a>;
   type WriteBatch = NormalWriteBatch;
 
+  #[inline(always)]
+  fn id(&self) -> TableId {
+    self.id
+  }
+
   #[inline]
   fn put<K, V>(&self, key: K, value: V) -> Result<(), Error>
   where
@@ -62,11 +67,6 @@ impl Table for NormalTable {
     let mut opts = ReadOptions::default();
     opts.set_prefix_same_as_start(true);
     NormalCursor::new(self.inner_db.raw_iterator_opt(opts), self.id, &self.anchor)
-  }
-
-  #[inline]
-  fn id(&self) -> TableId {
-    self.id
   }
 }
 

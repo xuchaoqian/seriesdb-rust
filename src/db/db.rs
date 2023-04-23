@@ -26,15 +26,21 @@ pub trait Db {
   type TableWeighter: Weighter<String, (), Arc<Self::Table>> + Clone;
   type WriteBatchX: WriteBatchX;
 
-  #[doc(hidden)]
-  fn inner_db(&self) -> &Arc<RocksdbDb>;
-  #[doc(hidden)]
+  ////////////////////////////////////////////////////////////////////////////////
+  /// Getters
+  ////////////////////////////////////////////////////////////////////////////////
+
+  fn inner(&self) -> &Arc<RocksdbDb>;
+
   fn cache(&self) -> &Cache<String, Arc<Self::Table>, Self::TableWeighter>;
-  #[doc(hidden)]
+
   fn last_table_id(&self) -> &AtomicU32;
-  #[doc(hidden)]
+
   fn initializer(&self) -> &ConcurrentInitializer<String, TableId>;
 
+  ////////////////////////////////////////////////////////////////////////////////
+  /// APIs
+  ////////////////////////////////////////////////////////////////////////////////
   #[inline]
   fn destroy<P: AsRef<Path>>(path: P) -> Result<(), Error> {
     Ok(RocksdbDb::destroy(&Options::new().inner, path)?)
@@ -63,7 +69,7 @@ pub trait Db {
       let anchor = build_userland_table_anchor(id, MAX_USERLAND_KEY_LEN);
       batch.delete_range(id.as_ref(), anchor.as_ref());
     }
-    let result = self.inner_db().write(batch);
+    let result = self.inner().write(batch);
     self.cache().remove(name);
     result.map_err(|err| Error::RocksdbError(err))
   }
@@ -74,7 +80,7 @@ pub trait Db {
       let anchor = build_userland_table_anchor(id, MAX_USERLAND_KEY_LEN);
       batch.delete_range(id.as_ref(), anchor.as_ref());
     }
-    Ok(self.inner_db().write(batch)?)
+    Ok(self.inner().write(batch)?)
   }
 
   fn rename_table(&self, old_name: &str, new_name: &str) -> Result<(), Error> {
@@ -86,7 +92,7 @@ pub trait Db {
       batch.put(build_name_to_id_table_inner_key(new_name), id);
       batch.put(id_to_name_table_inner_key, new_name);
     }
-    let result = self.inner_db().write(batch);
+    let result = self.inner().write(batch);
     self.cache().remove(old_name);
     result.map_err(|err| Error::RocksdbError(err))
   }
@@ -95,7 +101,7 @@ pub trait Db {
     let mut result: Vec<(String, u32)> = Vec::new();
     let mut opts = ReadOptions::default();
     opts.set_prefix_same_as_start(true);
-    let mut iter = self.inner_db().raw_iterator_opt(opts);
+    let mut iter = self.inner().raw_iterator_opt(opts);
     iter.seek(ID_TO_NAME_TABLE_ID);
     while iter.valid() {
       let key = iter.key().unwrap();
@@ -111,7 +117,7 @@ pub trait Db {
   #[inline]
   fn get_table_id_by_name(&self, name: &str) -> Result<Option<TableId>, Error> {
     let name_to_id_table_inner_key = build_name_to_id_table_inner_key(name);
-    if let Some(id) = self.inner_db().get(name_to_id_table_inner_key)? {
+    if let Some(id) = self.inner().get(name_to_id_table_inner_key)? {
       Ok(Some(u8s_to_u8a4(id.as_ref())))
     } else {
       Ok(None)
@@ -121,7 +127,7 @@ pub trait Db {
   #[inline]
   fn get_table_name_by_id(&self, id: TableId) -> Result<Option<String>, Error> {
     let id_to_name_table_inner_key = build_id_to_name_table_inner_key(id);
-    if let Some(name) = self.inner_db().get(id_to_name_table_inner_key)? {
+    if let Some(name) = self.inner().get(id_to_name_table_inner_key)? {
       Ok(Some(std::str::from_utf8(name.as_ref()).unwrap().to_string()))
     } else {
       Ok(None)
@@ -130,16 +136,15 @@ pub trait Db {
 
   #[inline]
   fn get_latest_sn(&self) -> u64 {
-    self.inner_db().latest_sequence_number()
+    self.inner().latest_sequence_number()
   }
 
   #[inline]
   fn get_write_op_batches_since(&self, sn: u64) -> Result<WriteOpBatchIterator, Error> {
-    let iter = self.inner_db().get_updates_since(sn)?;
+    let iter = self.inner().get_updates_since(sn)?;
     Ok(WriteOpBatchIterator::new(iter))
   }
 
-  #[inline]
   fn replay(&self, write_op_batches: Vec<WriteOpBatch>) -> Result<u64, Error> {
     let mut sn = 0;
     for write_op_batch in write_op_batches {
@@ -157,7 +162,7 @@ pub trait Db {
           }
         }
       }
-      self.inner_db().write(batch)?;
+      self.inner().write(batch)?;
     }
     Ok(sn)
   }
@@ -168,10 +173,12 @@ pub trait Db {
 
   fn write(&self, batch: Self::WriteBatchX) -> Result<(), Error>;
 
-  // Use this fix wal bug
+  ////////////////////////////////////////////////////////////////////////////////
+  /// Private functions
+  ////////////////////////////////////////////////////////////////////////////////
   #[doc(hidden)]
   #[inline]
-  fn try_put_placeholder(inner_db: Arc<RocksdbDb>) -> Result<(), Error> {
+  fn try_put_placeholder_to_fix_wal_bug(inner_db: Arc<RocksdbDb>) -> Result<(), Error> {
     let placeholder_item_inner_key = build_info_table_inner_key(PLACEHOLDER_ITEM_ID);
     if inner_db.get(&placeholder_item_inner_key)?.is_none() {
       Ok(inner_db.put(placeholder_item_inner_key, PLACEHOLDER_ITEM_ID)?)
@@ -249,6 +256,7 @@ pub trait Db {
   }
 
   #[doc(hidden)]
+  #[inline]
   fn generate_next_table_id(&self) -> Result<TableId, Error> {
     let current_id = self.last_table_id().fetch_add(1, Ordering::SeqCst) + 1;
     let current_id2 = u32_to_u8a4(current_id);
@@ -270,6 +278,6 @@ pub trait Db {
     let mut batch = WriteBatch::default();
     batch.put(name_to_id_table_inner_key, id);
     batch.put(id_to_name_table_inner_key, name);
-    Ok(self.inner_db().write(batch)?)
+    Ok(self.inner().write(batch)?)
   }
 }

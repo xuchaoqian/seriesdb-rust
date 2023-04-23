@@ -145,7 +145,7 @@ pub(crate) mod test_utils {
     pub fn new(db_name: &str) -> Self {
       let mut path = String::from("./data/");
       path.push_str(db_name);
-      let result = NormalDb::open(path.clone(), &crate::options::Options::new());
+      let result = NormalDb::open(path.clone(), &mut crate::options::Options::new());
       assert!(result.is_ok());
       TestContext { db: Some(Arc::new(result.unwrap())), path: path }
     }

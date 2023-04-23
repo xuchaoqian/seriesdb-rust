@@ -25,10 +25,10 @@ impl Weighter<String, (), Arc<NormalTable>> for NormalTableWeighter {
 }
 
 pub struct NormalDb {
-  inner: Arc<RocksdbDb>,
-  cache: Cache<String, Arc<NormalTable>, NormalTableWeighter>,
-  last_table_id: AtomicU32,
-  initializer: ConcurrentInitializer<String, TableId>,
+  pub(crate) inner: Arc<RocksdbDb>,
+  pub(crate) cache: Cache<String, Arc<NormalTable>, NormalTableWeighter>,
+  pub(crate) last_table_id: AtomicU32,
+  pub(crate) initializer: ConcurrentInitializer<String, TableId>,
 }
 
 impl Db for NormalDb {
@@ -36,27 +36,33 @@ impl Db for NormalDb {
   type TableWeighter = NormalTableWeighter;
   type WriteBatchX = NormalWriteBatchX;
 
-  #[doc(hidden)]
-  #[inline]
-  fn inner_db(&self) -> &Arc<RocksdbDb> {
+  ////////////////////////////////////////////////////////////////////////////////
+  /// Getters
+  ////////////////////////////////////////////////////////////////////////////////
+
+  #[inline(always)]
+  fn inner(&self) -> &Arc<RocksdbDb> {
     &self.inner
   }
-  #[doc(hidden)]
-  #[inline]
+
+  #[inline(always)]
   fn cache(&self) -> &Cache<String, Arc<Self::Table>, Self::TableWeighter> {
     &self.cache
   }
-  #[doc(hidden)]
-  #[inline]
+
+  #[inline(always)]
   fn last_table_id(&self) -> &AtomicU32 {
     &self.last_table_id
   }
-  #[doc(hidden)]
-  #[inline]
+
+  #[inline(always)]
   fn initializer(&self) -> &ConcurrentInitializer<String, TableId> {
     &self.initializer
   }
 
+  ////////////////////////////////////////////////////////////////////////////////
+  /// APIs
+  ////////////////////////////////////////////////////////////////////////////////
   #[inline]
   fn new_table(&self, id: TableId, anchor: bytes::Bytes) -> Self::Table {
     NormalTable::new(self.inner.clone(), id, anchor)
@@ -69,15 +75,14 @@ impl Db for NormalDb {
 
   #[inline]
   fn write(&self, batch: Self::WriteBatchX) -> Result<(), Error> {
-    Ok(self.inner_db().write(batch.inner)?)
+    Ok(self.inner().write(batch.inner)?)
   }
 }
 
 impl NormalDb {
-  #[inline]
-  pub fn open<P: AsRef<Path>>(path: P, opts: &Options) -> Result<Self, Error> {
+  pub fn open<P: AsRef<Path>>(path: P, opts: &mut Options) -> Result<Self, Error> {
     let inner_db = Arc::new(RocksdbDb::open(&opts.inner, path)?);
-    Self::try_put_placeholder(inner_db.clone())?;
+    Self::try_put_placeholder_to_fix_wal_bug(inner_db.clone())?;
     Self::ensure_ttl_enabled_consistent(inner_db.clone(), false)?;
     Ok(NormalDb {
       inner: inner_db.clone(),

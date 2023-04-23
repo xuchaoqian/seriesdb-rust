@@ -26,10 +26,10 @@ impl Weighter<String, (), Arc<TtlTable>> for TtlTableWeighter {
 }
 
 pub struct TtlDb {
-  inner: Arc<RocksdbDb>,
-  cache: Cache<String, Arc<TtlTable>, TtlTableWeighter>,
-  last_table_id: AtomicU32,
-  initializer: ConcurrentInitializer<String, TableId>,
+  pub(crate) inner: Arc<RocksdbDb>,
+  pub(crate) cache: Cache<String, Arc<TtlTable>, TtlTableWeighter>,
+  pub(crate) last_table_id: AtomicU32,
+  pub(crate) initializer: ConcurrentInitializer<String, TableId>,
 }
 
 impl Db for TtlDb {
@@ -37,27 +37,32 @@ impl Db for TtlDb {
   type TableWeighter = TtlTableWeighter;
   type WriteBatchX = TtlWriteBatchX;
 
-  #[doc(hidden)]
+  ////////////////////////////////////////////////////////////////////////////////
+  /// Getters
+  ////////////////////////////////////////////////////////////////////////////////
   #[inline]
-  fn inner_db(&self) -> &Arc<RocksdbDb> {
+  fn inner(&self) -> &Arc<RocksdbDb> {
     &self.inner
   }
-  #[doc(hidden)]
+
   #[inline]
   fn cache(&self) -> &Cache<String, Arc<Self::Table>, Self::TableWeighter> {
     &self.cache
   }
-  #[doc(hidden)]
+
   #[inline]
   fn last_table_id(&self) -> &AtomicU32 {
     &self.last_table_id
   }
-  #[doc(hidden)]
+
   #[inline]
   fn initializer(&self) -> &ConcurrentInitializer<String, TableId> {
     &self.initializer
   }
 
+  ////////////////////////////////////////////////////////////////////////////////
+  /// APIs
+  ////////////////////////////////////////////////////////////////////////////////
   #[inline]
   fn new_table(&self, id: TableId, anchor: bytes::Bytes) -> Self::Table {
     TtlTable::new(self.inner.clone(), id, anchor)
@@ -70,16 +75,15 @@ impl Db for TtlDb {
 
   #[inline]
   fn write(&self, batch: Self::WriteBatchX) -> Result<(), Error> {
-    Ok(self.inner_db().write(batch.inner)?)
+    Ok(self.inner().write(batch.inner)?)
   }
 }
 
 impl TtlDb {
-  #[inline]
   pub fn open<P: AsRef<Path>>(path: P, ttl: u32, opts: &mut Options) -> Result<Self, Error> {
     opts.set_compaction_filter_factory(CompactionFilterFactoryImpl::new(ttl));
     let inner_db = Arc::new(RocksdbDb::open(&opts.inner, path)?);
-    Self::try_put_placeholder(inner_db.clone())?;
+    Self::try_put_placeholder_to_fix_wal_bug(inner_db.clone())?;
     Self::ensure_ttl_enabled_consistent(inner_db.clone(), true)?;
     Ok(TtlDb {
       inner: inner_db.clone(),

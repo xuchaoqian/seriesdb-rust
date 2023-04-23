@@ -1,23 +1,24 @@
-use rocksdb::WriteBatch as WriteBatchInner;
+use rocksdb::WriteBatch as RocksdbWriteBatch;
 
+use super::WriteBatchXEnhanced;
+use crate::coder::Coder;
 use crate::types::*;
 use crate::utils::*;
 
 pub trait WriteBatchX {
-  #[doc(hidden)]
-  fn inner_write_batch_mut(&mut self) -> &mut WriteBatchInner;
+  fn inner_mut(&mut self) -> &mut RocksdbWriteBatch;
 
   #[inline]
   fn put<K, V>(&mut self, table_id: TableId, key: K, value: V)
   where
     K: AsRef<[u8]>,
     V: AsRef<[u8]>, {
-    self.inner_write_batch_mut().put(build_inner_key(table_id, key), value)
+    self.inner_mut().put(build_inner_key(table_id, key), value)
   }
 
   #[inline]
   fn delete<K: AsRef<[u8]>>(&mut self, table_id: TableId, key: K) {
-    self.inner_write_batch_mut().delete(build_inner_key(table_id, key))
+    self.inner_mut().delete(build_inner_key(table_id, key))
   }
 
   #[inline]
@@ -26,7 +27,13 @@ pub trait WriteBatchX {
     F: AsRef<[u8]>,
     T: AsRef<[u8]>, {
     self
-      .inner_write_batch_mut()
+      .inner_mut()
       .delete_range(build_inner_key(table_id, from_key), build_inner_key(table_id, to_key))
+  }
+
+  #[inline]
+  fn enhance<K, V, C: Coder<K, V>>(self) -> WriteBatchXEnhanced<Self, K, V, C>
+  where Self: Sized {
+    WriteBatchXEnhanced::new(self)
   }
 }

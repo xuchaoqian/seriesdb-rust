@@ -1,15 +1,14 @@
-use rocksdb::WriteBatch as WriteBatchInner;
+use rocksdb::WriteBatch as RocksdbWriteBatch;
 
 use super::write_batch_x::*;
 
 pub struct TtlWriteBatchX {
-  pub(crate) inner: WriteBatchInner,
+  pub(crate) inner: RocksdbWriteBatch,
 }
 
 impl WriteBatchX for TtlWriteBatchX {
-  #[doc(hidden)]
-  #[inline]
-  fn inner_write_batch_mut(&mut self) -> &mut WriteBatchInner {
+  #[inline(always)]
+  fn inner_mut(&mut self) -> &mut RocksdbWriteBatch {
     &mut self.inner
   }
 }
@@ -17,6 +16,6 @@ impl WriteBatchX for TtlWriteBatchX {
 impl TtlWriteBatchX {
   #[inline]
   pub(crate) fn new() -> Self {
-    TtlWriteBatchX { inner: WriteBatchInner::default() }
+    TtlWriteBatchX { inner: RocksdbWriteBatch::default() }
   }
 }

@@ -1,6 +1,8 @@
-pub trait Coder {
-  fn encode_key<From, To: AsRef<[u8]>>(key: From) -> To;
-  fn decode_key<From: AsRef<[u8]>, To>(key: From) -> To;
-  fn encode_value<From, To: AsRef<[u8]>>(value: From) -> To;
-  fn decode_value<From: AsRef<[u8]>, To>(value: From) -> To;
+use bytes::Bytes;
+
+pub trait Coder<K, V> {
+  fn encode_key(key: K) -> Bytes;
+  fn decode_key(key: Bytes) -> K;
+  fn encode_value(value: V) -> Bytes;
+  fn decode_value(value: Bytes) -> V;
 }

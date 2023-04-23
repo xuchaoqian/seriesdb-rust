@@ -1,12 +1,18 @@
 use bytes::Bytes;
 
+use super::TableEnhanced;
+use crate::coder::Coder;
+use crate::cursor::Cursor;
 use crate::error::Error;
 use crate::types::*;
+use crate::write_batch::WriteBatch;
 
 pub trait Table {
-  type Cursor<'a>
+  type Cursor<'a>: Cursor<'a>
   where Self: 'a;
-  type WriteBatch;
+  type WriteBatch: WriteBatch;
+
+  fn id(&self) -> TableId;
 
   fn put<K, V>(&self, key: K, value: V) -> Result<(), Error>
   where
@@ -23,5 +29,9 @@ pub trait Table {
 
   fn cursor<'a>(&'a self) -> Self::Cursor<'a>;
 
-  fn id(&self) -> TableId;
+  #[inline]
+  fn enhance<K, V, C: Coder<K, V>>(self) -> TableEnhanced<Self, K, V, C>
+  where Self: Sized {
+    TableEnhanced::new(self)
+  }
 }

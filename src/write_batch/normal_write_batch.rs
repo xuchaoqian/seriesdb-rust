@@ -9,13 +9,12 @@ pub struct NormalWriteBatch {
 }
 
 impl WriteBatch for NormalWriteBatch {
-  #[doc(hidden)]
-  #[inline]
-  fn inner_write_batch_mut(&mut self) -> &mut WriteBatchInner {
+  #[inline(always)]
+  fn inner_mut(&mut self) -> &mut WriteBatchInner {
     &mut self.inner
   }
-  #[doc(hidden)]
-  #[inline]
+
+  #[inline(always)]
   fn table_id(&self) -> TableId {
     self.table_id
   }
@@ -23,7 +22,7 @@ impl WriteBatch for NormalWriteBatch {
 
 impl NormalWriteBatch {
   #[inline]
-  pub(crate) fn new(table_id: TableId) -> Self {
+  pub fn new(table_id: TableId) -> Self {
     NormalWriteBatch { inner: WriteBatchInner::default(), table_id }
   }
 }

@@ -4,7 +4,7 @@ use criterion::{black_box, criterion_group, criterion_main, Criterion};
 use seriesdb::prelude::*;
 
 fn bench_db(c: &mut Criterion) {
-  let db = NormalDb::open("./data/seriesdb_bench", &Options::new()).unwrap();
+  let db = NormalDb::open("./data/seriesdb_bench", &mut Options::new()).unwrap();
   let db = Arc::new(db);
   c.bench_function("open_table", |b| {
     b.iter(|| {
