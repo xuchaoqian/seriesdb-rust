@@ -1,4 +1,4 @@
-use std::marker::PhantomData;
+use std::{marker::PhantomData, sync::Arc};
 
 use bytes::Bytes;
 
@@ -10,13 +10,13 @@ use crate::types::*;
 use crate::write_batch::*;
 
 pub struct TableEnhanced<T: Table, K, V, C: Coder<K, V>> {
-  pub(crate) raw: T,
+  pub(crate) raw: Arc<T>,
   phantom: PhantomData<(K, V, C)>,
 }
 
 impl<T: Table, K, V, C: Coder<K, V>> TableEnhanced<T, K, V, C> {
   #[inline]
-  pub fn new(raw: T) -> Self {
+  pub fn new(raw: Arc<T>) -> Self {
     Self { raw, phantom: PhantomData }
   }
 
@@ -51,7 +51,7 @@ impl<T: Table, K, V, C: Coder<K, V>> TableEnhanced<T, K, V, C> {
   }
 
   #[inline]
-  pub fn cursor<'a>(&'a self) -> CursorEnhanced<T::Cursor<'a>, K, V, C> {
-    self.raw.cursor().enhance()
+  pub fn new_cursor<'a>(&'a self) -> CursorEnhanced<T::Cursor<'a>, K, V, C> {
+    self.raw.new_cursor().enhance()
   }
 }

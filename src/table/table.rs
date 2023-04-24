@@ -1,3 +1,5 @@
+use std::sync::Arc;
+
 use bytes::Bytes;
 
 use super::TableEnhanced;
@@ -27,10 +29,10 @@ pub trait Table {
 
   fn get<K: AsRef<[u8]>>(&self, key: K) -> Result<Option<Bytes>, Error>;
 
-  fn cursor<'a>(&'a self) -> Self::Cursor<'a>;
+  fn new_cursor<'a>(&'a self) -> Self::Cursor<'a>;
 
   #[inline]
-  fn enhance<K, V, C: Coder<K, V>>(self) -> TableEnhanced<Self, K, V, C>
+  fn enhance<K, V, C: Coder<K, V>>(self: Arc<Self>) -> TableEnhanced<Self, K, V, C>
   where Self: Sized {
     TableEnhanced::new(self)
   }

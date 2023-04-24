@@ -4,7 +4,7 @@ use crate::coder::Coder;
 use crate::write_batch::*;
 
 pub struct WriteBatchXEnhanced<WB: WriteBatchX, K, V, C: Coder<K, V>> {
-  pub raw: WB,
+  pub(crate) raw: WB,
   phantom: PhantomData<(K, V, C)>,
 }
 

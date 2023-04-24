@@ -6,15 +6,18 @@ use crate::types::*;
 use crate::utils::*;
 
 pub trait WriteBatchX {
+  ////////////////////////////////////////////////////////////////////////////////
+  /// Getters
+  ////////////////////////////////////////////////////////////////////////////////
   fn inner_mut(&mut self) -> &mut RocksdbWriteBatch;
 
-  #[inline]
+  ////////////////////////////////////////////////////////////////////////////////
+  /// APIs
+  ////////////////////////////////////////////////////////////////////////////////
   fn put<K, V>(&mut self, table_id: TableId, key: K, value: V)
   where
     K: AsRef<[u8]>,
-    V: AsRef<[u8]>, {
-    self.inner_mut().put(build_inner_key(table_id, key), value)
-  }
+    V: AsRef<[u8]>;
 
   #[inline]
   fn delete<K: AsRef<[u8]>>(&mut self, table_id: TableId, key: K) {
@@ -22,10 +25,7 @@ pub trait WriteBatchX {
   }
 
   #[inline]
-  fn delete_range<F, T>(&mut self, table_id: TableId, from_key: F, to_key: T)
-  where
-    F: AsRef<[u8]>,
-    T: AsRef<[u8]>, {
+  fn delete_range<K: AsRef<[u8]>>(&mut self, table_id: TableId, from_key: K, to_key: K) {
     self
       .inner_mut()
       .delete_range(build_inner_key(table_id, from_key), build_inner_key(table_id, to_key))

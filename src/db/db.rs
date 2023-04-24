@@ -11,6 +11,7 @@ use concurrent_initializer::{ConcurrentInitializer, InitResult};
 use quick_cache::{sync::Cache, Weighter};
 use rocksdb::{ReadOptions, WriteBatch, DB as RocksdbDb};
 
+use crate::coder::Coder;
 use crate::consts::*;
 use crate::cursor::*;
 use crate::error::Error;
@@ -173,6 +174,13 @@ pub trait Db {
 
   fn write(&self, batch: Self::WriteBatchX) -> Result<(), Error>;
 
+  #[inline]
+  fn write_by_enhanced<K, V, C: Coder<K, V>>(
+    &self, batch: WriteBatchXEnhanced<Self::WriteBatchX, K, V, C>,
+  ) -> Result<(), Error> {
+    self.write(batch.raw)
+  }
+
   ////////////////////////////////////////////////////////////////////////////////
   /// Private functions
   ////////////////////////////////////////////////////////////////////////////////
@@ -208,7 +216,7 @@ pub trait Db {
   fn get_last_table_id(inner_db: Arc<RocksdbDb>) -> Result<u32, Error> {
     let anchor = build_id_to_name_table_anchor();
     let id_to_name_table = NormalTable::new(inner_db.clone(), ID_TO_NAME_TABLE_ID, anchor);
-    let mut cusor = id_to_name_table.cursor();
+    let mut cusor = id_to_name_table.new_cursor();
     cusor.seek_to_last();
     if cusor.is_valid() {
       Ok(u8s_to_u32(cusor.key().unwrap()))

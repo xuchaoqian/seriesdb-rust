@@ -51,6 +51,8 @@ impl<'a> NormalCursor<'a> {
 
 #[cfg(test)]
 mod tests {
+  use bytes::Bytes;
+
   use crate::cursor::*;
   use crate::db::*;
   use crate::setup;
@@ -59,20 +61,44 @@ mod tests {
   #[test]
   fn test_seek() {
     setup!("normal_cursor.test_seek"; db);
+
     let name = "huobi.btc.usdt.1m";
     let table = db.open_table(name).unwrap();
+    let name3m = "huobi.btc.usdt.3m";
+    let table3m = db.open_table(name3m).unwrap();
+    let name5m = "huobi.btc.usdt.5m";
+    let table5m = db.open_table(name5m).unwrap();
+
     let k1 = b"k1";
     let v1 = b"v1";
     let k2 = b"k2";
     let v2 = b"v2";
     let k3 = b"k3";
-    let v3 = b"v3";
+    let k4 = b"k4";
+    let v4 = b"v4";
+
     assert!(table.put(k1, v1).is_ok());
     assert!(table.put(k2, v2).is_ok());
-    assert!(table.put(k3, v3).is_ok());
-    let mut iter = table.cursor();
-    iter.seek_to_first();
-    assert!(iter.is_valid());
-    assert_eq!(k1, iter.key().unwrap());
+    assert!(table.put(k4, v4).is_ok());
+
+    let mut cursor = table.new_cursor();
+    cursor.seek_to_first();
+    assert!(cursor.is_valid());
+    assert_eq!(k1, cursor.key().unwrap());
+
+    cursor.seek_for_prev(k3);
+    assert!(cursor.is_valid());
+    assert_eq!(k2, cursor.key().unwrap());
+
+    cursor.seek(k3);
+    assert!(cursor.is_valid());
+    assert_eq!(k4, cursor.key().unwrap());
+
+    assert!(table5m.put(k1, v1).is_ok());
+    assert_eq!(table5m.get(k1).unwrap().unwrap(), Bytes::from(v1.as_ref()));
+
+    let mut cursor3m = table3m.new_cursor();
+    cursor3m.seek_to_first();
+    assert!(!cursor3m.is_valid());
   }
 }

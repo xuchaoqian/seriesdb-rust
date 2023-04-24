@@ -67,14 +67,14 @@ impl Table for TtlTable {
     if let Some(timestamped_value) = self.inner_db.get(build_inner_key(self.id, key))? {
       let mut value = Bytes::from(timestamped_value);
       value.advance(TIMESTAMP_LEN);
-      return Ok(Some(value));
+      Ok(Some(value))
     } else {
-      return Ok(None);
+      Ok(None)
     }
   }
 
   #[inline]
-  fn cursor<'a>(&'a self) -> Self::Cursor<'a> {
+  fn new_cursor<'a>(&'a self) -> Self::Cursor<'a> {
     let mut opts = ReadOptions::default();
     opts.set_prefix_same_as_start(true);
     TtlCursor::new(self.inner_db.raw_iterator_opt(opts), self.id, &self.anchor)
@@ -91,12 +91,12 @@ impl TtlTable {
 #[cfg(test)]
 mod tests {
   use crate::db::*;
-  use crate::setup;
+  use crate::setup_with_ttl;
   use crate::table::*;
 
   #[test]
   fn test_put() {
-    setup!("ttl_table.test_put"; db);
+    setup_with_ttl!("ttl_table.test_put"; 3; db);
     let name = "huobi.btc.usdt.1min";
     let table = db.open_table(name).unwrap();
     let result = table.put(b"k111", b"v111");
@@ -106,7 +106,7 @@ mod tests {
   #[allow(unused_must_use)]
   #[test]
   fn test_get() {
-    setup!("ttl_table.test_get"; db);
+    setup_with_ttl!("ttl_table.test_get"; 3; db);
     let name = "huobi.btc.usdt.1min";
     let table = db.open_table(name).unwrap();
     table.put(b"k111", b"v111");
@@ -117,7 +117,7 @@ mod tests {
   #[allow(unused_must_use)]
   #[test]
   fn test_delete() {
-    setup!("ttl_table.test_delete"; db);
+    setup_with_ttl!("ttl_table.test_delete"; 3; db);
     let name = "huobi.btc.usdt.1min";
     let table = db.open_table(name).unwrap();
     table.put(b"k111", b"v111");

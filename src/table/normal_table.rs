@@ -63,7 +63,7 @@ impl Table for NormalTable {
   }
 
   #[inline]
-  fn cursor<'a>(&'a self) -> Self::Cursor<'a> {
+  fn new_cursor<'a>(&'a self) -> Self::Cursor<'a> {
     let mut opts = ReadOptions::default();
     opts.set_prefix_same_as_start(true);
     NormalCursor::new(self.inner_db.raw_iterator_opt(opts), self.id, &self.anchor)
