@@ -170,7 +170,7 @@ pub trait Db {
 
   fn new_table(&self, id: TableId, anchor: Bytes) -> Self::Table;
 
-  fn new_write_batch_x() -> Self::WriteBatchX;
+  fn new_write_batch_x(&self) -> Self::WriteBatchX;
 
   fn write(&self, batch: Self::WriteBatchX) -> Result<(), Error>;
 

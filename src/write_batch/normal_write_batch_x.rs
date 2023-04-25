@@ -35,3 +35,40 @@ impl NormalWriteBatchX {
     NormalWriteBatchX { inner: RocksdbWriteBatch::default() }
   }
 }
+
+#[cfg(test)]
+mod tests {
+
+  use crate::db::*;
+  use crate::setup;
+  use crate::table::*;
+  use crate::write_batch::*;
+
+  #[test]
+  fn test_write_batch() {
+    setup!("normal_write_batch_x.test_write_batch"; db);
+
+    let name1m = "huobi.btc.usdt.1m";
+    let table1m = db.open_table(name1m).unwrap();
+    let name3m = "huobi.btc.usdt.3m";
+    let table3m = db.open_table(name3m).unwrap();
+
+    let mut wb = db.new_write_batch_x();
+    wb.put(table1m.id(), b"k1", b"v1");
+    wb.put(table1m.id(), b"k2", b"v2");
+    wb.put(table1m.id(), b"k3", b"v3");
+    wb.put(table3m.id(), b"k4", b"v4");
+    wb.put(table3m.id(), b"k5", b"v5");
+
+    wb.delete(table1m.id(), b"k2");
+    wb.delete_range(table3m.id(), b"k3", b"k5");
+    assert!(db.write(wb).is_ok());
+
+    assert_eq!(table1m.get(b"k1").unwrap().unwrap().as_ref(), b"v1");
+    assert_eq!(table1m.get(b"k3").unwrap().unwrap().as_ref(), b"v3");
+
+    assert!(table3m.get(b"k3").unwrap().is_none());
+    assert!(table3m.get(b"k4").unwrap().is_none());
+    assert_eq!(table3m.get(b"k5").unwrap().unwrap().as_ref(), b"v5");
+  }
+}

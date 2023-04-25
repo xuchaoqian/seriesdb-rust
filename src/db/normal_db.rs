@@ -39,7 +39,6 @@ impl Db for NormalDb {
   ////////////////////////////////////////////////////////////////////////////////
   /// Getters
   ////////////////////////////////////////////////////////////////////////////////
-
   #[inline(always)]
   fn inner(&self) -> &Arc<RocksdbDb> {
     &self.inner
@@ -69,7 +68,7 @@ impl Db for NormalDb {
   }
 
   #[inline]
-  fn new_write_batch_x() -> Self::WriteBatchX {
+  fn new_write_batch_x(&self) -> Self::WriteBatchX {
     NormalWriteBatchX::new()
   }
 
@@ -309,10 +308,10 @@ mod tests {
     // Spawn n threads.
     let threads: Vec<_> = (0..1_u8)
       .map(|_thread_id| {
-        let my_db = db.clone();
+        let db = db.clone();
 
         thread::spawn(move || {
-          let table = my_db.create_table("test_compact_filter").unwrap();
+          let table = db.create_table("test_compact_filter").unwrap();
 
           let _ = table.put(b"k1", b"a");
           let _ = table.put(b"_k", b"b");
@@ -321,20 +320,20 @@ mod tests {
           let begin_key = build_inner_key(table.id(), b"k1");
           let placehoder_key = build_info_table_inner_key(PLACEHOLDER_ITEM_ID);
 
-          my_db.inner.compact_range(Some(begin_key.clone()), None::<&[u8]>);
+          db.inner.compact_range(Some(begin_key.clone()), None::<&[u8]>);
 
           assert_eq!(&*table.get(b"k1").unwrap().unwrap(), b"a");
-          assert_eq!(my_db.inner.get(&placehoder_key).unwrap(), Some(vec![0, 0]));
+          assert_eq!(db.inner.get(&placehoder_key).unwrap(), Some(vec![0, 0]));
 
           thread::sleep(time::Duration::from_secs(2));
 
           assert_eq!(&*table.get(b"k1").unwrap().unwrap(), b"a");
-          assert_eq!(my_db.inner.get(&placehoder_key).unwrap(), Some(vec![0, 0]));
+          assert_eq!(db.inner.get(&placehoder_key).unwrap(), Some(vec![0, 0]));
 
-          my_db.inner.compact_range(None::<&[u8]>, None::<&[u8]>);
+          db.inner.compact_range(None::<&[u8]>, None::<&[u8]>);
 
           assert_eq!(&*table.get(b"k1").unwrap().unwrap(), b"a");
-          assert_eq!(my_db.inner.get(&placehoder_key).unwrap(), Some(vec![0, 0]));
+          assert_eq!(db.inner.get(&placehoder_key).unwrap(), Some(vec![0, 0]));
         })
       })
       .collect();

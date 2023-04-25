@@ -1,7 +1,5 @@
 use std::{marker::PhantomData, sync::Arc};
 
-use bytes::Bytes;
-
 use super::table::Table;
 use crate::coder::*;
 use crate::cursor::*;
@@ -46,8 +44,8 @@ impl<T: Table, K, V, C: Coder<K, V>> TableEnhanced<T, K, V, C> {
   }
 
   #[inline]
-  pub fn get(&self, key: K) -> Result<Option<Bytes>, Error> {
-    Ok(self.raw.get(C::encode_key(key))?)
+  pub fn get(&self, key: K) -> Result<Option<V>, Error> {
+    Ok(self.raw.get(C::encode_key(key))?.map(|value| C::decode_value(value.as_ref())))
   }
 
   #[inline]
