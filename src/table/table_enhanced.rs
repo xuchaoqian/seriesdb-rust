@@ -30,12 +30,12 @@ impl<T: Table, K, V, C: Coder<K, V>> TableEnhanced<T, K, V, C> {
 
   #[inline]
   pub fn put(&self, key: K, value: V) -> Result<(), Error> {
-    Ok(self.raw.put(C::encode_key(key), C::encode_value(value))?)
+    self.raw.put(C::encode_key(key), C::encode_value(value))
   }
 
   #[inline]
   pub fn delete(&self, key: K) -> Result<(), Error> {
-    Ok(self.raw.delete(C::encode_key(key))?)
+    self.raw.delete(C::encode_key(key))
   }
 
   #[inline]
