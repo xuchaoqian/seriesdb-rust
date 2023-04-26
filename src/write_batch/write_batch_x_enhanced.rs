@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 
 use crate::coder::Coder;
+use crate::error::Error;
 use crate::types::*;
 use crate::write_batch::*;
 
@@ -28,6 +29,11 @@ impl<WB: WriteBatchX, K, V, C: Coder<K, V>> WriteBatchXEnhanced<WB, K, V, C> {
   #[inline]
   pub fn delete_range(&mut self, table_id: TableId, from_key: K, to_key: K) {
     self.raw.delete_range(table_id, C::encode_key(from_key), C::encode_key(to_key))
+  }
+
+  #[inline]
+  pub fn write(self) -> Result<(), Error> {
+    self.raw.write()
   }
 }
 
@@ -94,7 +100,7 @@ mod tests {
 
     wb.delete(table1m.id(), 2);
     wb.delete_range(table3m.id(), 3, 5);
-    assert!(db.write_by_enhanced(wb).is_ok());
+    assert!(wb.write().is_ok());
 
     assert_eq!(table1m.get(1).unwrap().unwrap(), 1);
     assert_eq!(table1m.get(3).unwrap().unwrap(), 3);
@@ -119,10 +125,9 @@ mod tests {
     wb.put(table1m.id(), 3, 3);
     wb.put(table3m.id(), 4, 4);
     wb.put(table3m.id(), 5, 5);
-
     wb.delete(table1m.id(), 2);
     wb.delete_range(table3m.id(), 3, 5);
-    assert!(db.write_by_enhanced(wb).is_ok());
+    assert!(wb.write().is_ok());
 
     assert_eq!(table1m.get(1).unwrap().unwrap(), 1);
     assert_eq!(table1m.get(3).unwrap().unwrap(), 3);

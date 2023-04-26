@@ -1,7 +1,10 @@
+use std::cmp::Ord;
+
 use rocksdb::WriteBatch as RocksdbWriteBatch;
 
 use super::WriteBatchXEnhanced;
 use crate::coder::Coder;
+use crate::error::Error;
 use crate::types::*;
 use crate::utils::*;
 
@@ -31,8 +34,10 @@ pub trait WriteBatchX {
       .delete_range(build_inner_key(table_id, from_key), build_inner_key(table_id, to_key))
   }
 
+  fn write(self) -> Result<(), Error>;
+
   #[inline]
-  fn enhance<K, V, C: Coder<K, V>>(self) -> WriteBatchXEnhanced<Self, K, V, C>
+  fn enhance<K: Ord, V, C: Coder<K, V>>(self) -> WriteBatchXEnhanced<Self, K, V, C>
   where Self: Sized {
     WriteBatchXEnhanced::new(self)
   }

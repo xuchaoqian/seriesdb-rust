@@ -43,16 +43,6 @@ impl Table for NormalTable {
   }
 
   #[inline]
-  fn new_write_batch(&self) -> Self::WriteBatch {
-    NormalWriteBatch::new(self.id)
-  }
-
-  #[inline]
-  fn write(&self, batch: Self::WriteBatch) -> Result<(), Error> {
-    Ok(self.inner_db.write(batch.inner)?)
-  }
-
-  #[inline]
   fn delete<K: AsRef<[u8]>>(&self, key: K) -> Result<(), Error> {
     Ok(self.inner_db.delete(build_inner_key(self.id, key))?)
   }
@@ -60,6 +50,11 @@ impl Table for NormalTable {
   #[inline]
   fn get<K: AsRef<[u8]>>(&self, key: K) -> Result<Option<Bytes>, Error> {
     Ok(self.inner_db.get(build_inner_key(self.id, key))?.map(|value| Bytes::from(value)))
+  }
+
+  #[inline]
+  fn new_write_batch(&self) -> Self::WriteBatch {
+    NormalWriteBatch::new(self.inner_db.clone(), self.id)
   }
 
   #[inline]

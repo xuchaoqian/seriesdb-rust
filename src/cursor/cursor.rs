@@ -7,7 +7,8 @@ use crate::error::Error;
 use crate::types::*;
 use crate::utils::*;
 
-pub trait Cursor<'a> {
+pub trait Cursor<'a>
+where Self: 'a {
   ////////////////////////////////////////////////////////////////////////////////
   /// Getters
   ////////////////////////////////////////////////////////////////////////////////
@@ -66,14 +67,7 @@ pub trait Cursor<'a> {
     self.inner_mut().prev()
   }
 
-  #[inline]
-  fn key(&'a self) -> Option<&[u8]> {
-    if let Some(v) = self.inner().key() {
-      Some(extract_key(v))
-    } else {
-      None
-    }
-  }
+  fn key(&self) -> Option<&[u8]>;
 
   fn value(&self) -> Option<&[u8]>;
 

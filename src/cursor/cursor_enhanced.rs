@@ -56,7 +56,7 @@ impl<'a, C: Cursor<'a>, K, V, C2: Coder<K, V>> CursorEnhanced<'a, C, K, V, C2> {
   }
 
   #[inline]
-  pub fn key(&'a self) -> Option<K> {
+  pub fn key(&self) -> Option<K> {
     self.raw.key().map(|key| C2::decode_key(key))
   }
 

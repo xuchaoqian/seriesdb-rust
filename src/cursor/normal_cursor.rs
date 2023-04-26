@@ -3,6 +3,7 @@ use rocksdb::DBRawIterator;
 
 use crate::cursor::*;
 use crate::types::*;
+use crate::utils::*;
 
 pub struct NormalCursor<'a> {
   pub(crate) inner: DBRawIterator<'a>,
@@ -37,6 +38,15 @@ impl<'a> Cursor<'a> for NormalCursor<'a> {
   ////////////////////////////////////////////////////////////////////////////////
   /// APIs
   ////////////////////////////////////////////////////////////////////////////////
+  #[inline]
+  fn key(&self) -> Option<&[u8]> {
+    if let Some(v) = self.inner.key() {
+      Some(extract_key(v))
+    } else {
+      None
+    }
+  }
+
   #[inline]
   fn value(&self) -> Option<&[u8]> {
     self.inner.value()

@@ -39,6 +39,15 @@ impl<'a> Cursor<'a> for TtlCursor<'a> {
   /// APIs
   ////////////////////////////////////////////////////////////////////////////////
   #[inline]
+  fn key(&self) -> Option<&[u8]> {
+    if let Some(v) = self.inner.key() {
+      Some(extract_key(v))
+    } else {
+      None
+    }
+  }
+
+  #[inline]
   fn value(&self) -> Option<&[u8]> {
     if let Some(value) = self.inner.value() {
       Some(extract_value(value))

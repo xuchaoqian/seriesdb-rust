@@ -1,4 +1,4 @@
-use std::sync::Arc;
+use std::{cmp::Ord, sync::Arc};
 
 use bytes::Bytes;
 
@@ -21,18 +21,23 @@ pub trait Table {
     K: AsRef<[u8]>,
     V: AsRef<[u8]>;
 
-  fn new_write_batch(&self) -> Self::WriteBatch;
-
-  fn write(&self, batch: Self::WriteBatch) -> Result<(), Error>;
-
   fn delete<K: AsRef<[u8]>>(&self, key: K) -> Result<(), Error>;
 
+  #[inline]
+  fn delete_range<K: AsRef<[u8]>>(&self, from_key: K, to_key: K) -> Result<(), Error> {
+    let mut batch = self.new_write_batch();
+    batch.delete_range(from_key, to_key);
+    batch.write()
+  }
+
   fn get<K: AsRef<[u8]>>(&self, key: K) -> Result<Option<Bytes>, Error>;
+
+  fn new_write_batch(&self) -> Self::WriteBatch;
 
   fn new_cursor<'a>(&'a self) -> Self::Cursor<'a>;
 
   #[inline]
-  fn enhance<K, V, C: Coder<K, V>>(self: Arc<Self>) -> TableEnhanced<Self, K, V, C>
+  fn enhance<K: Ord, V, C: Coder<K, V>>(self: Arc<Self>) -> TableEnhanced<Self, K, V, C>
   where Self: Sized {
     TableEnhanced::new(self)
   }

@@ -2,6 +2,7 @@ use rocksdb::WriteBatch as RocksdbWriteBatch;
 
 use super::WriteBatchEnhanced;
 use crate::coder::Coder;
+use crate::error::Error;
 use crate::types::*;
 use crate::utils::*;
 
@@ -34,6 +35,8 @@ pub trait WriteBatch {
       .inner_mut()
       .delete_range(build_inner_key(table_id, from_key), build_inner_key(table_id, to_key))
   }
+
+  fn write(self) -> Result<(), Error>;
 
   #[inline]
   fn enhance<K, V, C: Coder<K, V>>(self) -> WriteBatchEnhanced<Self, K, V, C>

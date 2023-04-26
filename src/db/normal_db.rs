@@ -69,12 +69,7 @@ impl Db for NormalDb {
 
   #[inline]
   fn new_write_batch_x(&self) -> Self::WriteBatchX {
-    NormalWriteBatchX::new()
-  }
-
-  #[inline]
-  fn write(&self, batch: Self::WriteBatchX) -> Result<(), Error> {
-    Ok(self.inner().write(batch.inner)?)
+    NormalWriteBatchX::new(self.inner.clone())
   }
 }
 
@@ -211,7 +206,7 @@ mod tests {
     batch.put(b"k111", b"v111");
     batch.delete(b"k111");
     batch.delete_range(b"k111", b"k112");
-    table.write(batch).unwrap();
+    batch.write().unwrap();
     let sn3 = db.get_latest_sn();
     assert_eq!(sn2 + 3, sn3);
   }
@@ -245,7 +240,7 @@ mod tests {
     batch.put(b"k112", b"v112"); // 1 record
     batch.delete(b"k111"); // 1 record
     batch.delete_range(b"k111", b"k112"); // 1 record
-    table.write(batch).unwrap();
+    batch.write().unwrap();
 
     let sn3 = db.get_latest_sn();
     assert_eq!(sn3, 14);

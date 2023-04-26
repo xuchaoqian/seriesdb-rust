@@ -1,6 +1,7 @@
 use std::marker::PhantomData;
 
 use crate::coder::Coder;
+use crate::error::Error;
 use crate::write_batch::*;
 
 pub struct WriteBatchEnhanced<WB: WriteBatch, K, V, C: Coder<K, V>> {
@@ -27,6 +28,11 @@ impl<WB: WriteBatch, K, V, C: Coder<K, V>> WriteBatchEnhanced<WB, K, V, C> {
   #[inline]
   pub fn delete_range(&mut self, from_key: K, to_key: K) {
     self.raw.delete_range(C::encode_key(from_key), C::encode_key(to_key))
+  }
+
+  #[inline]
+  pub fn write(self) -> Result<(), Error> {
+    self.raw.write()
   }
 }
 
@@ -90,7 +96,7 @@ mod tests {
     wb.put(5, 5);
     wb.delete(2);
     wb.delete_range(3, 5);
-    assert!(table.write(wb).is_ok());
+    assert!(wb.write().is_ok());
 
     assert_eq!(table.get(1).unwrap().unwrap(), 1);
     assert_eq!(table.get(5).unwrap().unwrap(), 5);
@@ -115,7 +121,7 @@ mod tests {
     wb.put(5, 5);
     wb.delete(2);
     wb.delete_range(3, 5);
-    assert!(table.write(wb).is_ok());
+    assert!(wb.write().is_ok());
 
     assert_eq!(table.get(1).unwrap().unwrap(), 1);
     assert_eq!(table.get(5).unwrap().unwrap(), 5);

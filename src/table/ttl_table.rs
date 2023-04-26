@@ -48,16 +48,6 @@ impl Table for TtlTable {
   }
 
   #[inline]
-  fn new_write_batch(&self) -> Self::WriteBatch {
-    TtlWriteBatch::new(self.id)
-  }
-
-  #[inline]
-  fn write(&self, batch: Self::WriteBatch) -> Result<(), Error> {
-    Ok(self.inner_db.write(batch.inner)?)
-  }
-
-  #[inline]
   fn delete<K: AsRef<[u8]>>(&self, key: K) -> Result<(), Error> {
     Ok(self.inner_db.delete(build_inner_key(self.id, key))?)
   }
@@ -71,6 +61,11 @@ impl Table for TtlTable {
     } else {
       Ok(None)
     }
+  }
+
+  #[inline]
+  fn new_write_batch(&self) -> Self::WriteBatch {
+    TtlWriteBatch::new(self.inner_db.clone(), self.id)
   }
 
   #[inline]

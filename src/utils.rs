@@ -82,7 +82,7 @@ pub fn extract_table_id(buf: &[u8]) -> &[u8] {
 }
 
 #[inline]
-pub fn extract_key(buf: &[u8]) -> &[u8] {
+pub fn extract_key<'a>(buf: &'a [u8]) -> &'a [u8] {
   &buf[TABLE_ID_LEN..]
 }
 

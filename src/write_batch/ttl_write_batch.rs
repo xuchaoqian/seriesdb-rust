@@ -1,11 +1,16 @@
+use std::sync::Arc;
+
 use rocksdb::WriteBatch as RocksdbWriteBatch;
+use rocksdb::DB as RocksdbDb;
 
 use super::write_batch::*;
+use crate::error::Error;
 use crate::types::*;
 use crate::utils::*;
 
 pub struct TtlWriteBatch {
-  pub(crate) inner: RocksdbWriteBatch,
+  pub(crate) inner_db: Arc<RocksdbDb>,
+  pub(crate) inner: Option<RocksdbWriteBatch>,
   pub(crate) table_id: TableId,
 }
 
@@ -15,7 +20,7 @@ impl WriteBatch for TtlWriteBatch {
   ////////////////////////////////////////////////////////////////////////////////
   #[inline(always)]
   fn inner_mut(&mut self) -> &mut RocksdbWriteBatch {
-    &mut self.inner
+    self.inner.as_mut().unwrap()
   }
 
   #[inline(always)]
@@ -36,12 +41,17 @@ impl WriteBatch for TtlWriteBatch {
       .inner_mut()
       .put(build_inner_key(table_id, key), build_timestamped_value(u32_to_u8a4(now()), value))
   }
+
+  #[inline]
+  fn write(mut self) -> Result<(), Error> {
+    Ok(self.inner_db.write(self.inner.take().unwrap())?)
+  }
 }
 
 impl TtlWriteBatch {
   #[inline]
-  pub fn new(table_id: TableId) -> Self {
-    TtlWriteBatch { inner: RocksdbWriteBatch::default(), table_id }
+  pub fn new(inner_db: Arc<RocksdbDb>, table_id: TableId) -> Self {
+    TtlWriteBatch { inner_db, inner: Some(RocksdbWriteBatch::default()), table_id }
   }
 }
 
@@ -68,7 +78,7 @@ mod tests {
     wb.put(b"k5", b"v5");
     wb.delete(b"k2");
     wb.delete_range(b"k3", b"k5");
-    assert!(table.write(wb).is_ok());
+    assert!(wb.write().is_ok());
 
     assert_eq!(table.get(b"k1").unwrap().unwrap().as_ref(), b"v1");
     assert_eq!(table.get(b"k5").unwrap().unwrap().as_ref(), b"v5");
