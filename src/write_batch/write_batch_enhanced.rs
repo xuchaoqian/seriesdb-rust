@@ -16,17 +16,17 @@ impl<WB: WriteBatch, K, V, C: Coder<K, V>> WriteBatchEnhanced<WB, K, V, C> {
   }
 
   #[inline]
-  pub fn put(&mut self, key: K, value: V) {
+  pub fn put(&mut self, key: &K, value: &V) {
     self.raw.put(C::encode_key(key), C::encode_value(value))
   }
 
   #[inline]
-  pub fn delete(&mut self, key: K) {
+  pub fn delete(&mut self, key: &K) {
     self.raw.delete(C::encode_key(key))
   }
 
   #[inline]
-  pub fn delete_range(&mut self, from_key: K, to_key: K) {
+  pub fn delete_range(&mut self, from_key: &K, to_key: &K) {
     self.raw.delete_range(C::encode_key(from_key), C::encode_key(to_key))
   }
 
@@ -57,9 +57,9 @@ mod tests {
     type EncodedValue = Bytes;
 
     #[inline(always)]
-    fn encode_key(key: Key) -> Self::EncodedKey {
+    fn encode_key(key: &Key) -> Self::EncodedKey {
       let mut buf = [0; 4];
-      BigEndian::write_u32(&mut buf, key);
+      BigEndian::write_u32(&mut buf, *key);
       buf
     }
 
@@ -69,9 +69,9 @@ mod tests {
     }
 
     #[inline(always)]
-    fn encode_value(value: Value) -> Self::EncodedValue {
+    fn encode_value(value: &Value) -> Self::EncodedValue {
       let mut buf = BytesMut::with_capacity(4);
-      buf.put_u32(value);
+      buf.put_u32(*value);
       buf.freeze()
     }
 
@@ -89,21 +89,21 @@ mod tests {
     let table = db.open_table(name).unwrap().enhance::<Key, Value, Coder>();
 
     let mut wb = table.new_write_batch();
-    wb.put(1, 1);
-    wb.put(2, 2);
-    wb.put(3, 3);
-    wb.put(4, 4);
-    wb.put(5, 5);
-    wb.delete(2);
-    wb.delete_range(3, 5);
+    wb.put(&1, &1);
+    wb.put(&2, &2);
+    wb.put(&3, &3);
+    wb.put(&4, &4);
+    wb.put(&5, &5);
+    wb.delete(&2);
+    wb.delete_range(&3, &5);
     assert!(wb.write().is_ok());
 
-    assert_eq!(table.get(1).unwrap().unwrap(), 1);
-    assert_eq!(table.get(5).unwrap().unwrap(), 5);
+    assert_eq!(table.get(&1).unwrap().unwrap(), 1);
+    assert_eq!(table.get(&5).unwrap().unwrap(), 5);
 
-    assert!(table.get(2).unwrap().is_none());
-    assert!(table.get(3).unwrap().is_none());
-    assert!(table.get(4).unwrap().is_none());
+    assert!(table.get(&2).unwrap().is_none());
+    assert!(table.get(&3).unwrap().is_none());
+    assert!(table.get(&4).unwrap().is_none());
   }
 
   #[test]
@@ -114,20 +114,20 @@ mod tests {
     let table = db.open_table(name).unwrap().enhance::<Key, Value, Coder>();
 
     let mut wb = table.new_write_batch();
-    wb.put(1, 1);
-    wb.put(2, 2);
-    wb.put(3, 3);
-    wb.put(4, 4);
-    wb.put(5, 5);
-    wb.delete(2);
-    wb.delete_range(3, 5);
+    wb.put(&1, &1);
+    wb.put(&2, &2);
+    wb.put(&3, &3);
+    wb.put(&4, &4);
+    wb.put(&5, &5);
+    wb.delete(&2);
+    wb.delete_range(&3, &5);
     assert!(wb.write().is_ok());
 
-    assert_eq!(table.get(1).unwrap().unwrap(), 1);
-    assert_eq!(table.get(5).unwrap().unwrap(), 5);
+    assert_eq!(table.get(&1).unwrap().unwrap(), 1);
+    assert_eq!(table.get(&5).unwrap().unwrap(), 5);
 
-    assert!(table.get(2).unwrap().is_none());
-    assert!(table.get(3).unwrap().is_none());
-    assert!(table.get(4).unwrap().is_none());
+    assert!(table.get(&2).unwrap().is_none());
+    assert!(table.get(&3).unwrap().is_none());
+    assert!(table.get(&4).unwrap().is_none());
   }
 }

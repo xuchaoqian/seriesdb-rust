@@ -29,22 +29,22 @@ impl<T: Table, K, V, C: Coder<K, V>> TableEnhanced<T, K, V, C> {
   }
 
   #[inline]
-  pub fn put(&self, key: K, value: V) -> Result<(), Error> {
+  pub fn put(&self, key: &K, value: &V) -> Result<(), Error> {
     self.raw.put(C::encode_key(key), C::encode_value(value))
   }
 
   #[inline]
-  pub fn delete(&self, key: K) -> Result<(), Error> {
+  pub fn delete(&self, key: &K) -> Result<(), Error> {
     self.raw.delete(C::encode_key(key))
   }
 
   #[inline]
-  pub fn delete_range(&self, from_key: K, to_key: K) -> Result<(), Error> {
+  pub fn delete_range(&self, from_key: &K, to_key: &K) -> Result<(), Error> {
     self.raw.delete_range(C::encode_key(from_key), C::encode_key(to_key))
   }
 
   #[inline]
-  pub fn get(&self, key: K) -> Result<Option<V>, Error> {
+  pub fn get(&self, key: &K) -> Result<Option<V>, Error> {
     Ok(self.raw.get(C::encode_key(key))?.map(|value| C::decode_value(value.as_ref())))
   }
 
@@ -66,7 +66,7 @@ impl<T: Table, K, V, C: Coder<K, V>> TableEnhanced<T, K, V, C> {
   }
 
   #[inline]
-  pub fn get_since(&self, key: K, limit: u32) -> Vec<V> {
+  pub fn get_since(&self, key: &K, limit: u32) -> Vec<V> {
     let mut values = Vec::new();
     let mut count = 0;
     let mut cursor = self.new_cursor();
@@ -83,7 +83,7 @@ impl<T: Table, K, V, C: Coder<K, V>> TableEnhanced<T, K, V, C> {
   }
 
   #[inline]
-  pub fn get_until(&self, key: K, limit: u32) -> Vec<V> {
+  pub fn get_until(&self, key: &K, limit: u32) -> Vec<V> {
     let mut reversed_values = Vec::new();
     let mut count = 0;
     let mut cursor = self.new_cursor();
@@ -119,7 +119,7 @@ impl<T: Table, K, V, C: Coder<K, V>> TableEnhanced<T, K, V, C> {
   }
 
   #[inline]
-  pub fn get_between(&self, begin_key: K, end_key: K, limit: u32) -> Vec<V> {
+  pub fn get_between(&self, begin_key: &K, end_key: &K, limit: u32) -> Vec<V> {
     let mut values = Vec::new();
     let mut count = 0;
     let mut cursor = self.new_cursor().raw;
@@ -212,9 +212,9 @@ mod tests {
     type EncodedValue = Bytes;
 
     #[inline(always)]
-    fn encode_key(key: Key) -> Self::EncodedKey {
+    fn encode_key(key: &Key) -> Self::EncodedKey {
       let mut buf = [0; 4];
-      BigEndian::write_u32(&mut buf, key);
+      BigEndian::write_u32(&mut buf, *key);
       buf
     }
 
@@ -224,9 +224,9 @@ mod tests {
     }
 
     #[inline(always)]
-    fn encode_value(value: Value) -> Self::EncodedValue {
+    fn encode_value(value: &Value) -> Self::EncodedValue {
       let mut buf = BytesMut::with_capacity(4);
-      buf.put_u32(value);
+      buf.put_u32(*value);
       buf.freeze()
     }
 
@@ -242,20 +242,20 @@ mod tests {
     let name = "huobi.btc.usdt.1min";
     let table = db.open_table(name).unwrap().enhance::<Key, Value, Coder>();
 
-    assert!(table.put(1, 1).is_ok());
-    assert_eq!(table.get(1).unwrap().unwrap(), 1);
+    assert!(table.put(&1, &1).is_ok());
+    assert_eq!(table.get(&1).unwrap().unwrap(), 1);
 
-    assert!(table.delete(1).is_ok());
-    assert!(table.get(1).unwrap().is_none());
+    assert!(table.delete(&1).is_ok());
+    assert!(table.get(&1).unwrap().is_none());
 
-    assert!(table.put(2, 2).is_ok());
-    assert!(table.put(3, 3).is_ok());
-    assert_eq!(table.get(2).unwrap().unwrap(), 2);
-    assert_eq!(table.get(3).unwrap().unwrap(), 3);
+    assert!(table.put(&2, &2).is_ok());
+    assert!(table.put(&3, &3).is_ok());
+    assert_eq!(table.get(&2).unwrap().unwrap(), 2);
+    assert_eq!(table.get(&3).unwrap().unwrap(), 3);
 
-    assert!(table.delete_range(2, 3).is_ok());
-    assert!(table.get(2).unwrap().is_none());
-    assert_eq!(table.get(3).unwrap().unwrap(), 3);
+    assert!(table.delete_range(&2, &3).is_ok());
+    assert!(table.get(&2).unwrap().is_none());
+    assert_eq!(table.get(&3).unwrap().unwrap(), 3);
   }
 
   #[test]
@@ -263,9 +263,9 @@ mod tests {
     setup!("table_enhanced.test_get_reverse_nth"; db);
     let name = "huobi.btc.usdt.1min";
     let table = db.open_table(name).unwrap().enhance::<Key, Value, Coder>();
-    table.put(1, 1).unwrap();
-    table.put(2, 2).unwrap();
-    table.put(3, 3).unwrap();
+    table.put(&1, &1).unwrap();
+    table.put(&2, &2).unwrap();
+    table.put(&3, &3).unwrap();
 
     assert_eq!(table.get_reverse_nth(0).unwrap(), 3);
     assert_eq!(table.get_reverse_nth(1).unwrap(), 2);
@@ -278,14 +278,14 @@ mod tests {
     setup!("table_enhanced.get_since"; db);
     let name = "huobi.btc.usdt.1min";
     let table = db.open_table(name).unwrap().enhance::<Key, Value, Coder>();
-    table.put(1, 1).unwrap();
-    table.put(2, 2).unwrap();
-    table.put(3, 3).unwrap();
+    table.put(&1, &1).unwrap();
+    table.put(&2, &2).unwrap();
+    table.put(&3, &3).unwrap();
 
-    assert_eq!(table.get_since(0, 3), vec![1, 2, 3]);
-    assert_eq!(table.get_since(1, 2), vec![1, 2]);
-    assert_eq!(table.get_since(1, 1), vec![1]);
-    assert_eq!(table.get_since(4, 3), vec![]);
+    assert_eq!(table.get_since(&0, 3), vec![1, 2, 3]);
+    assert_eq!(table.get_since(&1, 2), vec![1, 2]);
+    assert_eq!(table.get_since(&1, 1), vec![1]);
+    assert_eq!(table.get_since(&4, 3), vec![]);
   }
 
   #[test]
@@ -293,14 +293,14 @@ mod tests {
     setup!("table_enhanced.get_until"; db);
     let name = "huobi.btc.usdt.1min";
     let table = db.open_table(name).unwrap().enhance::<Key, Value, Coder>();
-    table.put(1, 1).unwrap();
-    table.put(2, 2).unwrap();
-    table.put(3, 3).unwrap();
+    table.put(&1, &1).unwrap();
+    table.put(&2, &2).unwrap();
+    table.put(&3, &3).unwrap();
 
-    assert_eq!(table.get_until(0, 3), vec![]);
-    assert_eq!(table.get_until(1, 2), vec![1]);
-    assert_eq!(table.get_until(3, 2), vec![2, 3]);
-    assert_eq!(table.get_until(4, 3), vec![1, 2, 3]);
+    assert_eq!(table.get_until(&0, 3), vec![]);
+    assert_eq!(table.get_until(&1, 2), vec![1]);
+    assert_eq!(table.get_until(&3, 2), vec![2, 3]);
+    assert_eq!(table.get_until(&4, 3), vec![1, 2, 3]);
   }
 
   #[test]
@@ -308,9 +308,9 @@ mod tests {
     setup!("table_enhanced.get_until_last"; db);
     let name = "huobi.btc.usdt.1min";
     let table = db.open_table(name).unwrap().enhance::<Key, Value, Coder>();
-    table.put(1, 1).unwrap();
-    table.put(2, 2).unwrap();
-    table.put(3, 3).unwrap();
+    table.put(&1, &1).unwrap();
+    table.put(&2, &2).unwrap();
+    table.put(&3, &3).unwrap();
 
     assert_eq!(table.get_until_last(3), vec![1, 2, 3]);
     assert_eq!(table.get_until_last(2), vec![2, 3]);
@@ -323,14 +323,14 @@ mod tests {
     setup!("table_enhanced.get_between"; db);
     let name = "huobi.btc.usdt.1min";
     let table = db.open_table(name).unwrap().enhance::<Key, Value, Coder>();
-    table.put(1, 1).unwrap();
-    table.put(2, 2).unwrap();
-    table.put(3, 3).unwrap();
+    table.put(&1, &1).unwrap();
+    table.put(&2, &2).unwrap();
+    table.put(&3, &3).unwrap();
 
-    assert_eq!(table.get_between(1, 3, 3), vec![1, 2, 3]);
-    assert_eq!(table.get_between(1, 3, 0), vec![]);
-    assert_eq!(table.get_between(1, 3, 1), vec![1]);
-    assert_eq!(table.get_between(0, 2, 3), vec![1, 2]);
+    assert_eq!(table.get_between(&1, &3, 3), vec![1, 2, 3]);
+    assert_eq!(table.get_between(&1, &3, 0), vec![]);
+    assert_eq!(table.get_between(&1, &3, 1), vec![1]);
+    assert_eq!(table.get_between(&0, &2, 3), vec![1, 2]);
   }
 
   #[test]
@@ -341,9 +341,9 @@ mod tests {
 
     assert!(table.get_first_key().is_none());
 
-    table.put(1, 1).unwrap();
-    table.put(2, 2).unwrap();
-    table.put(3, 3).unwrap();
+    table.put(&1, &1).unwrap();
+    table.put(&2, &2).unwrap();
+    table.put(&3, &3).unwrap();
 
     assert_eq!(table.get_first_key().unwrap(), 1);
   }
@@ -356,9 +356,9 @@ mod tests {
 
     assert!(table.get_last_key().is_none());
 
-    table.put(1, 1).unwrap();
-    table.put(2, 2).unwrap();
-    table.put(3, 3).unwrap();
+    table.put(&1, &1).unwrap();
+    table.put(&2, &2).unwrap();
+    table.put(&3, &3).unwrap();
 
     assert_eq!(table.get_last_key().unwrap(), 3);
   }
@@ -371,9 +371,9 @@ mod tests {
 
     assert!(table.get_boundary_keys().is_none());
 
-    table.put(1, 1).unwrap();
-    table.put(2, 2).unwrap();
-    table.put(3, 3).unwrap();
+    table.put(&1, &1).unwrap();
+    table.put(&2, &2).unwrap();
+    table.put(&3, &3).unwrap();
 
     assert_eq!(table.get_boundary_keys().unwrap(), (1, 3));
   }
