@@ -7,6 +7,7 @@ use crate::error::Error;
 use crate::types::*;
 use crate::write_batch::*;
 
+#[derive(Debug)]
 pub struct TableEnhanced<T: Table, K, V, C: Coder<K, V>> {
   pub(crate) raw: Arc<T>,
   phantom: PhantomData<(K, V, C)>,
