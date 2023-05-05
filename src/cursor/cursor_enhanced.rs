@@ -1,4 +1,4 @@
-use std::marker::PhantomData;
+use std::{borrow::Borrow, marker::PhantomData};
 
 use crate::coder::*;
 use crate::cursor::*;
@@ -36,12 +36,12 @@ impl<'a, C: Cursor<'a>, K, V, C2: Coder<K, V>> CursorEnhanced<'a, C, K, V, C2> {
   }
 
   #[inline]
-  pub fn seek(&mut self, key: &K) {
+  pub fn seek<BK: Borrow<K>>(&mut self, key: BK) {
     self.raw.seek(C2::encode_key(key));
   }
 
   #[inline]
-  pub fn seek_for_prev(&mut self, key: &K) {
+  pub fn seek_for_prev<BK: Borrow<K>>(&mut self, key: BK) {
     self.raw.seek_for_prev(C2::encode_key(key));
   }
 
@@ -68,6 +68,8 @@ impl<'a, C: Cursor<'a>, K, V, C2: Coder<K, V>> CursorEnhanced<'a, C, K, V, C2> {
 
 #[cfg(test)]
 mod tests {
+  use std::borrow::Borrow;
+
   use byteorder::{BigEndian, ByteOrder};
   use bytes::{BufMut, Bytes, BytesMut};
 
@@ -87,9 +89,9 @@ mod tests {
     type EncodedValue = Bytes;
 
     #[inline(always)]
-    fn encode_key(key: &Key) -> Self::EncodedKey {
+    fn encode_key<BK: Borrow<Key>>(key: BK) -> Self::EncodedKey {
       let mut buf = [0; 4];
-      BigEndian::write_u32(&mut buf, *key);
+      BigEndian::write_u32(&mut buf, *key.borrow());
       buf
     }
 
@@ -99,9 +101,9 @@ mod tests {
     }
 
     #[inline(always)]
-    fn encode_value(value: &Value) -> Self::EncodedValue {
+    fn encode_value<BV: Borrow<Value>>(value: BV) -> Self::EncodedValue {
       let mut buf = BytesMut::with_capacity(4);
-      buf.put_u32(*value);
+      buf.put_u32(*value.borrow());
       buf.freeze()
     }
 
@@ -122,9 +124,9 @@ mod tests {
     let v2 = 2;
     let k3 = 3;
     let v3 = 3;
-    assert!(table.put(&k1, &v1).is_ok());
-    assert!(table.put(&k2, &v2).is_ok());
-    assert!(table.put(&k3, &v3).is_ok());
+    assert!(table.put(k1, v1).is_ok());
+    assert!(table.put(k2, v2).is_ok());
+    assert!(table.put(k3, v3).is_ok());
 
     let mut cursor = table.new_cursor();
 
@@ -148,19 +150,19 @@ mod tests {
     assert_eq!(k3, cursor.key().unwrap());
     assert_eq!(v3, cursor.value().unwrap());
 
-    cursor.seek_for_prev(&1);
+    cursor.seek_for_prev(1);
     assert!(cursor.is_valid());
     assert_eq!(k1, cursor.key().unwrap());
     assert_eq!(v1, cursor.value().unwrap());
 
-    cursor.seek_for_prev(&0);
+    cursor.seek_for_prev(0);
     assert!(!cursor.is_valid());
 
-    cursor.seek_for_prev(&4);
+    cursor.seek_for_prev(4);
     assert_eq!(k3, cursor.key().unwrap());
     assert_eq!(v3, cursor.value().unwrap());
 
-    cursor.seek(&2);
+    cursor.seek(2);
     assert_eq!(k2, cursor.key().unwrap());
     assert_eq!(v2, cursor.value().unwrap());
   }
