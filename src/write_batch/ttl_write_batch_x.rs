@@ -46,6 +46,18 @@ impl TtlWriteBatchX {
   pub(crate) fn new(inner_db: Arc<RocksdbDb>) -> Self {
     TtlWriteBatchX { inner_db, inner: Some(RocksdbWriteBatch::default()) }
   }
+
+  #[inline]
+  pub fn put_timestamped<K, V>(&mut self, table_id: TableId, key: K, value: V) -> u32
+  where
+    K: AsRef<[u8]>,
+    V: AsRef<[u8]>, {
+    let now = now();
+    self
+      .inner_mut()
+      .put(build_inner_key(table_id, key), build_timestamped_value(u32_to_u8a4(now), value));
+    now
+  }
 }
 
 #[cfg(test)]
@@ -70,7 +82,8 @@ mod tests {
     wb.put(table1m.id(), b"k2", b"v2");
     wb.put(table1m.id(), b"k3", b"v3");
     wb.put(table3m.id(), b"k4", b"v4");
-    wb.put(table3m.id(), b"k5", b"v5");
+    let ts = wb.put_timestamped(table3m.id(), b"k5", b"v5");
+    assert!(ts > 0);
 
     wb.delete(table1m.id(), b"k2");
     wb.delete_range(table3m.id(), b"k3", b"k5");

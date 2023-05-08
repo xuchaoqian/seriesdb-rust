@@ -81,6 +81,18 @@ impl TtlTable {
   pub(crate) fn new(inner_db: Arc<RocksdbDb>, id: TableId, anchor: Bytes) -> Self {
     TtlTable { inner_db, id, anchor }
   }
+
+  #[inline]
+  pub fn put_timestamped<K, V>(&self, key: K, value: V) -> Result<u32, Error>
+  where
+    K: AsRef<[u8]>,
+    V: AsRef<[u8]>, {
+    let now = now();
+    self
+      .inner_db
+      .put(build_inner_key(self.id, key), build_timestamped_value(u32_to_u8a4(now), value))?;
+    Ok(now)
+  }
 }
 
 #[cfg(test)]
@@ -96,6 +108,8 @@ mod tests {
     let table = db.open_table(name).unwrap();
     let result = table.put(b"k111", b"v111");
     assert!(result.is_ok());
+    let result = table.put_timestamped(b"k222", b"v222");
+    assert!(result.unwrap() > 0);
   }
 
   #[allow(unused_must_use)]

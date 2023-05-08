@@ -61,6 +61,15 @@ impl<'a> TtlCursor<'a> {
   pub fn new(inner: DBRawIterator<'a>, table_id: TableId, anchor: &'a Bytes) -> Self {
     TtlCursor { inner, table_id, anchor }
   }
+
+  #[inline]
+  pub fn timestamped_value(&self) -> Option<(u32, &[u8])> {
+    if let Some(value) = self.inner.value() {
+      Some((u8s_to_u32(extract_timestamp(value)), extract_value(value)))
+    } else {
+      None
+    }
+  }
 }
 
 #[cfg(test)]
@@ -98,6 +107,7 @@ mod tests {
     let mut cursor = table.new_cursor();
     cursor.seek_to_first();
     assert!(cursor.is_valid());
+    assert!(cursor.timestamped_value().unwrap().0 > 0);
     assert_eq!(k1, cursor.key().unwrap());
 
     cursor.seek_for_prev(k3);
