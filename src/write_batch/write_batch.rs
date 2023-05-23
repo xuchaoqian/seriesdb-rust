@@ -29,7 +29,7 @@ pub trait WriteBatch {
   }
 
   #[inline]
-  fn delete_range<K: AsRef<[u8]>>(&mut self, from_key: K, to_key: K) {
+  fn delete_range<K: AsRef<[u8]>, K2: AsRef<[u8]>>(&mut self, from_key: K, to_key: K2) {
     let table_id = self.table_id();
     self
       .inner_mut()

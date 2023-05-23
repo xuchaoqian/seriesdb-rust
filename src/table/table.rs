@@ -24,7 +24,9 @@ pub trait Table {
   fn delete<K: AsRef<[u8]>>(&self, key: K) -> Result<(), Error>;
 
   #[inline]
-  fn delete_range<K: AsRef<[u8]>>(&self, from_key: K, to_key: K) -> Result<(), Error> {
+  fn delete_range<K: AsRef<[u8]>, K2: AsRef<[u8]>>(
+    &self, from_key: K, to_key: K2,
+  ) -> Result<(), Error> {
     let mut batch = self.new_write_batch();
     batch.delete_range(from_key, to_key);
     batch.write()

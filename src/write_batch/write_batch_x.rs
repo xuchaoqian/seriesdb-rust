@@ -28,7 +28,9 @@ pub trait WriteBatchX {
   }
 
   #[inline]
-  fn delete_range<K: AsRef<[u8]>>(&mut self, table_id: TableId, from_key: K, to_key: K) {
+  fn delete_range<K: AsRef<[u8]>, K2: AsRef<[u8]>>(
+    &mut self, table_id: TableId, from_key: K, to_key: K2,
+  ) {
     self
       .inner_mut()
       .delete_range(build_inner_key(table_id, from_key), build_inner_key(table_id, to_key))
