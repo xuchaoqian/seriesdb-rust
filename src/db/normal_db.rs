@@ -1,5 +1,4 @@
 use std::{
-  num::NonZeroU32,
   path::Path,
   sync::{atomic::AtomicU32, Arc},
 };
@@ -18,9 +17,9 @@ use crate::write_batch::*;
 #[derive(Clone)]
 pub struct NormalTableWeighter;
 
-impl Weighter<String, (), Arc<NormalTable>> for NormalTableWeighter {
-  fn weight(&self, _key: &String, _qey: &(), val: &Arc<NormalTable>) -> NonZeroU32 {
-    NonZeroU32::new(12 + val.anchor.len() as u32).unwrap()
+impl Weighter<String, Arc<NormalTable>> for NormalTableWeighter {
+  fn weight(&self, _key: &String, val: &Arc<NormalTable>) -> u32 {
+    12 + val.anchor.len() as u32
   }
 }
 

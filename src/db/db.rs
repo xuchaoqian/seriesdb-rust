@@ -23,7 +23,7 @@ use crate::write_op::*;
 
 pub trait Db {
   type Table: Table;
-  type TableWeighter: Weighter<String, (), Arc<Self::Table>> + Clone;
+  type TableWeighter: Weighter<String, Arc<Self::Table>> + Clone;
   type WriteBatchX: WriteBatchX;
 
   ////////////////////////////////////////////////////////////////////////////////

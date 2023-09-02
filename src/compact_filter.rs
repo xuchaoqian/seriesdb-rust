@@ -15,6 +15,7 @@ pub struct CompactionFilterImpl {
 }
 
 impl CompactionFilter for CompactionFilterImpl {
+  #[inline]
   fn filter(&mut self, _level: u32, inner_key: &[u8], inner_value: &[u8]) -> CompactionDecision {
     if inner_key.len() < 4 || inner_value.len() < 4 {
       return CompactionDecision::Keep;
@@ -33,12 +34,14 @@ impl CompactionFilter for CompactionFilterImpl {
     return CompactionDecision::Keep;
   }
 
+  #[inline]
   fn name(&self) -> &std::ffi::CStr {
     self.name.as_c_str()
   }
 }
 
 impl CompactionFilterImpl {
+  #[inline]
   pub fn new(ttl: u32) -> Self {
     CompactionFilterImpl { name: CString::new("seriesdb_compaction_filter").unwrap(), ttl }
   }
@@ -52,16 +55,19 @@ pub struct CompactionFilterFactoryImpl {
 impl CompactionFilterFactory for CompactionFilterFactoryImpl {
   type Filter = CompactionFilterImpl;
 
+  #[inline]
   fn create(&mut self, _context: CompactionFilterContext) -> Self::Filter {
     CompactionFilterImpl::new(self.ttl)
   }
 
+  #[inline]
   fn name(&self) -> &std::ffi::CStr {
     self.name.as_c_str()
   }
 }
 
 impl CompactionFilterFactoryImpl {
+  #[inline]
   pub fn new(ttl: u32) -> Self {
     CompactionFilterFactoryImpl {
       name: CString::new("seriesdb_compaction_filter_factory").unwrap(),
