@@ -51,11 +51,6 @@ pub fn build_id_to_name_table_inner_key(table_id: TableId) -> Bytes {
 }
 
 #[inline]
-pub fn build_id_to_max_key_table_inner_key(table_id: TableId) -> Bytes {
-  build_inner_key(ID_TO_MAX_KEY_TABLE_ID, table_id)
-}
-
-#[inline]
 pub fn build_inner_key<K: AsRef<[u8]>>(table_id: TableId, key: K) -> Bytes {
   let key = key.as_ref();
   let len = TABLE_ID_LEN + 1 + key.len();

@@ -19,9 +19,6 @@ pub(crate) const NAME_TO_ID_TABLE_ID: TableId = [0, 0, 0, 1];
 // 2 as BigEndian
 pub(crate) const ID_TO_NAME_TABLE_ID: TableId = [0, 0, 0, 2];
 
-// 3 as BigEndian
-pub(crate) const ID_TO_MAX_KEY_TABLE_ID: TableId = [0, 0, 0, 3];
-
 // 0 as BigEndian. Use this to fix wal bug.
 pub(crate) const PLACEHOLDER_ITEM_ID: ItemId = [0, 0];
 
