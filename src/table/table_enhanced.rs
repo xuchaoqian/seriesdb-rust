@@ -419,6 +419,13 @@ mod tests {
     table.put(k2, v2).unwrap();
     table.put(k3, v3).unwrap();
 
+    use crate::cursor::Cursor;
+    let mut cursor = table.new_cursor().raw;
+    cursor.seek_to_first();
+    while cursor.is_valid() {
+      cursor.next();
+    }
+
     assert_eq!(table.get_last_key().unwrap(), k3);
   }
 

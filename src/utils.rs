@@ -1,3 +1,5 @@
+use std::{ptr, slice};
+
 use byteorder::{BigEndian, ByteOrder};
 use bytes::{Bytes, BytesMut};
 use chrono::prelude::*;
@@ -49,30 +51,62 @@ pub fn build_id_to_name_table_inner_key(table_id: TableId) -> Bytes {
 }
 
 #[inline]
-pub fn build_id_to_name_table_anchor() -> Bytes {
-  build_inner_key(ID_TO_NAME_TABLE_ID, set_every_bit_to_one(TABLE_ID_LEN + 1))
-}
-
-#[inline]
-pub fn build_userland_table_anchor(table_id: TableId, key_len: usize) -> Bytes {
-  build_inner_key(table_id, set_every_bit_to_one((key_len + 1).into()))
+pub fn build_id_to_max_key_table_inner_key(table_id: TableId) -> Bytes {
+  build_inner_key(ID_TO_MAX_KEY_TABLE_ID, table_id)
 }
 
 #[inline]
 pub fn build_inner_key<K: AsRef<[u8]>>(table_id: TableId, key: K) -> Bytes {
   let key = key.as_ref();
-  let mut buf = BytesMut::with_capacity(table_id.len() + key.len());
-  buf.extend_from_slice(table_id.as_ref());
-  buf.extend_from_slice(key);
+  let len = TABLE_ID_LEN + 1 + key.len();
+  let mut buf = BytesMut::with_capacity(len);
+  unsafe {
+    let dst = slice::from_raw_parts_mut(buf.as_mut_ptr(), len);
+    copy_nonoverlapping(table_id.as_ref(), dst, 0);
+    dst[TABLE_ID_LEN] = 1;
+    copy_nonoverlapping(key, dst, TABLE_ID_LEN + 1);
+    buf.set_len(len);
+  }
+  buf.freeze()
+}
+
+#[inline]
+pub fn build_head_anchor(table_id: TableId) -> Bytes {
+  let len = TABLE_ID_LEN + 1;
+  let mut buf = BytesMut::with_capacity(len);
+  unsafe {
+    let dst = slice::from_raw_parts_mut(buf.as_mut_ptr(), len);
+    copy_nonoverlapping(table_id.as_ref(), dst, 0);
+    dst[TABLE_ID_LEN] = 0;
+    buf.set_len(len);
+  }
+  buf.freeze()
+}
+
+#[inline]
+pub fn build_tail_anchor(table_id: TableId) -> Bytes {
+  let len = TABLE_ID_LEN + 1;
+  let mut buf = BytesMut::with_capacity(len);
+  unsafe {
+    let dst = slice::from_raw_parts_mut(buf.as_mut_ptr(), len);
+    copy_nonoverlapping(table_id.as_ref(), dst, 0);
+    dst[TABLE_ID_LEN] = 2;
+    buf.set_len(len);
+  }
   buf.freeze()
 }
 
 #[inline]
 pub fn build_timestamped_value<V: AsRef<[u8]>>(timestamp: Timestamp, value: V) -> Bytes {
   let value = value.as_ref();
-  let mut buf = BytesMut::with_capacity(timestamp.len() + value.len());
-  buf.extend_from_slice(timestamp.as_ref());
-  buf.extend_from_slice(value);
+  let len = TIMESTAMP_LEN + value.len();
+  let mut buf = BytesMut::with_capacity(len);
+  unsafe {
+    let dst = slice::from_raw_parts_mut(buf.as_mut_ptr(), len);
+    copy_nonoverlapping(timestamp.as_ref(), dst, 0);
+    copy_nonoverlapping(value, dst, TIMESTAMP_LEN);
+    buf.set_len(len);
+  }
   buf.freeze()
 }
 
@@ -83,7 +117,7 @@ pub fn extract_table_id(buf: &[u8]) -> &[u8] {
 
 #[inline]
 pub fn extract_key<'a>(buf: &'a [u8]) -> &'a [u8] {
-  &buf[TABLE_ID_LEN..]
+  &buf[TABLE_ID_LEN + 1..]
 }
 
 #[inline]
@@ -96,17 +130,19 @@ pub fn extract_value(buf: &[u8]) -> &[u8] {
   &buf[TIMESTAMP_LEN..]
 }
 
-#[inline]
-fn set_every_bit_to_one(key_len: usize) -> Bytes {
-  Bytes::from(vec![255; key_len.into()])
-}
-
 ////////////////////////////////////////////////////////////////////////////////
 /// other utils
 ////////////////////////////////////////////////////////////////////////////////
 #[inline]
 pub fn now() -> u32 {
   Utc::now().timestamp() as u32
+}
+
+#[inline]
+unsafe fn copy_nonoverlapping(src: &[u8], dst: &mut [u8], dst_offset: usize) {
+  unsafe {
+    ptr::copy_nonoverlapping(src.as_ptr(), dst[dst_offset..].as_mut_ptr(), src.len());
+  }
 }
 
 ////////////////////////////////////////////////////////////////////////////////
@@ -200,7 +236,7 @@ mod tests {
 
   #[test]
   fn test_build_info_table_inner_key() {
-    assert_eq!(build_info_table_inner_key([0, 0]), vec![0, 0, 0, 0, 0, 0]);
+    assert_eq!(build_info_table_inner_key([0, 0]), vec![0, 0, 0, 0, 1, 0, 0]);
   }
 
   #[test]
@@ -208,28 +244,30 @@ mod tests {
     assert_eq!(
       build_name_to_id_table_inner_key("huobi.btc.usdt.1m"),
       vec![
-        0, 0, 0, 1, 104, 117, 111, 98, 105, 46, 98, 116, 99, 46, 117, 115, 100, 116, 46, 49, 109
+        0, 0, 0, 1, 1, 104, 117, 111, 98, 105, 46, 98, 116, 99, 46, 117, 115, 100, 116, 46, 49, 109
       ]
     );
   }
 
   #[test]
   fn test_build_id_to_name_table_inner_key() {
-    assert_eq!(build_id_to_name_table_inner_key([0, 0, 4, 0]), vec![0, 0, 0, 2, 0, 0, 4, 0]);
+    assert_eq!(build_id_to_name_table_inner_key([0, 0, 4, 0]), vec![0, 0, 0, 2, 1, 0, 0, 4, 0]);
   }
 
   #[test]
-  fn test_build_userland_table_anchor() {
-    assert_eq!(
-      build_userland_table_anchor([0, 0, 4, 0], 4),
-      vec![0, 0, 4, 0, 255, 255, 255, 255, 255]
-    );
+  fn test_build_head_anchor() {
+    assert_eq!(build_head_anchor([0, 0, 4, 0]), vec![0, 0, 4, 0, 0]);
+  }
+
+  #[test]
+  fn test_build_tail_anchor() {
+    assert_eq!(build_tail_anchor([0, 0, 4, 1]), vec![0, 0, 4, 1, 2]);
   }
 
   #[test]
   fn test_build_inner_key() {
     let inner_key = build_inner_key([0, 0, 4, 0], [0, 0, 0, 0]);
-    assert_eq!(inner_key, vec![0, 0, 4, 0, 0, 0, 0, 0]);
+    assert_eq!(inner_key, vec![0, 0, 4, 0, 1, 0, 0, 0, 0]);
   }
 
   #[test]
@@ -241,8 +279,8 @@ mod tests {
 
   #[test]
   fn test_extract_key() {
-    let inner_key = [0, 0, 4, 0, 0, 0, 0, 128, 0, 254];
-    let table_id = extract_key(&inner_key);
-    assert_eq!(table_id, [0, 0, 0, 128, 0, 254]);
+    let inner_key = [0, 0, 4, 0, 1, 0, 0, 0, 128, 0, 254];
+    let key = extract_key(&inner_key);
+    assert_eq!(key, [0, 0, 0, 128, 0, 254]);
   }
 }

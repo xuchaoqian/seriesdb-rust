@@ -6,7 +6,6 @@ use std::{
   },
 };
 
-use bytes::Bytes;
 use concurrent_initializer::{ConcurrentInitializer, InitResult};
 use quick_cache::{sync::Cache, Weighter};
 use rocksdb::{ReadOptions, WriteBatch, DB as RocksdbDb};
@@ -38,6 +37,8 @@ pub trait Db {
 
   fn initializer(&self) -> &ConcurrentInitializer<String, TableId>;
 
+  fn opts(&self) -> &Options;
+
   ////////////////////////////////////////////////////////////////////////////////
   /// APIs
   ////////////////////////////////////////////////////////////////////////////////
@@ -52,7 +53,7 @@ pub trait Db {
       return Ok(table);
     } else {
       let table = Arc::new(if let Some(id) = self.get_table_id_by_name(name)? {
-        self.new_table(id, build_userland_table_anchor(id, MAX_USERLAND_KEY_LEN))
+        self.new_table(id)
       } else {
         self.create_table(name)?
       });
@@ -66,8 +67,7 @@ pub trait Db {
     if let Some(id) = self.get_table_id_by_name(name)? {
       batch.delete(&build_name_to_id_table_inner_key(name));
       batch.delete(&build_id_to_name_table_inner_key(id));
-      let anchor = build_userland_table_anchor(id, MAX_USERLAND_KEY_LEN);
-      batch.delete_range(id.as_ref(), anchor.as_ref());
+      batch.delete_range(build_head_anchor(id).as_ref(), build_tail_anchor(id).as_ref());
     }
     let result = self.inner().write(batch);
     self.cache().remove(name);
@@ -77,8 +77,7 @@ pub trait Db {
   fn truncate_table(&self, name: &str) -> Result<(), Error> {
     let mut batch = WriteBatch::default();
     if let Some(id) = self.get_table_id_by_name(name)? {
-      let anchor = build_userland_table_anchor(id, MAX_USERLAND_KEY_LEN);
-      batch.delete_range(id.as_ref(), anchor.as_ref());
+      batch.delete_range(build_head_anchor(id).as_ref(), build_tail_anchor(id).as_ref());
     }
     Ok(self.inner().write(batch)?)
   }
@@ -167,7 +166,7 @@ pub trait Db {
     Ok(sn)
   }
 
-  fn new_table(&self, id: TableId, anchor: Bytes) -> Self::Table;
+  fn new_table(&self, id: TableId) -> Self::Table;
 
   fn new_write_batch_x(&self) -> Self::WriteBatchX;
 
@@ -204,8 +203,7 @@ pub trait Db {
   #[doc(hidden)]
   #[inline]
   fn get_last_table_id(inner_db: Arc<RocksdbDb>) -> Result<u32, Error> {
-    let anchor = build_id_to_name_table_anchor();
-    let id_to_name_table = NormalTable::new(inner_db.clone(), ID_TO_NAME_TABLE_ID, anchor);
+    let id_to_name_table = NormalTable::new(inner_db.clone(), ID_TO_NAME_TABLE_ID);
     let mut cusor = id_to_name_table.new_cursor();
     cusor.seek_to_last();
     if cusor.is_valid() {
@@ -243,12 +241,8 @@ pub trait Db {
       },
     );
     match result {
-      InitResult::Initialized(id) => {
-        Ok(self.new_table(id, build_userland_table_anchor(id, MAX_USERLAND_KEY_LEN)))
-      }
-      InitResult::ReadExisting(id) => {
-        Ok(self.new_table(id, build_userland_table_anchor(id, MAX_USERLAND_KEY_LEN)))
-      }
+      InitResult::Initialized(id) => Ok(self.new_table(id)),
+      InitResult::ReadExisting(id) => Ok(self.new_table(id)),
       InitResult::InitErr(err) => Err(Error::ErrorPtr(err)),
     }
   }

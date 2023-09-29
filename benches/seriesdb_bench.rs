@@ -20,6 +20,15 @@ fn bench_db(c: &mut Criterion) {
       }
     })
   });
+  c.bench_function("build_inner_key", |b| {
+    let table_id = black_box([0, 0, 0, 1]);
+    let key = black_box("huobi.btc.usdt.1min");
+    b.iter(|| {
+      for _ in 0..black_box(1000000) {
+        seriesdb::utils::build_inner_key(table_id, key);
+      }
+    })
+  });
 }
 
 criterion_group!(benches, bench_db);

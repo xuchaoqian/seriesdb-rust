@@ -18,8 +18,8 @@ use crate::write_batch::*;
 pub struct NormalTableWeighter;
 
 impl Weighter<String, Arc<NormalTable>> for NormalTableWeighter {
-  fn weight(&self, _key: &String, val: &Arc<NormalTable>) -> u32 {
-    12 + val.anchor.len() as u32
+  fn weight(&self, _key: &String, _val: &Arc<NormalTable>) -> u32 {
+    16 as u32
   }
 }
 
@@ -28,6 +28,7 @@ pub struct NormalDb {
   pub(crate) cache: Cache<String, Arc<NormalTable>, NormalTableWeighter>,
   pub(crate) last_table_id: AtomicU32,
   pub(crate) initializer: ConcurrentInitializer<String, TableId>,
+  pub(crate) opts: Options,
 }
 
 impl Db for NormalDb {
@@ -58,12 +59,17 @@ impl Db for NormalDb {
     &self.initializer
   }
 
+  #[inline]
+  fn opts(&self) -> &Options {
+    &self.opts
+  }
+
   ////////////////////////////////////////////////////////////////////////////////
   /// APIs
   ////////////////////////////////////////////////////////////////////////////////
   #[inline]
-  fn new_table(&self, id: TableId, anchor: bytes::Bytes) -> Self::Table {
-    NormalTable::new(self.inner.clone(), id, anchor)
+  fn new_table(&self, id: TableId) -> Self::Table {
+    NormalTable::new(self.inner.clone(), id)
   }
 
   #[inline]
@@ -73,7 +79,8 @@ impl Db for NormalDb {
 }
 
 impl NormalDb {
-  pub fn open<P: AsRef<Path>>(path: P, opts: &mut Options) -> Result<Self, Error> {
+  pub fn open<P: AsRef<Path>>(path: P, opts: &Options) -> Result<Self, Error> {
+    let opts = opts.clone();
     let inner_db = Arc::new(RocksdbDb::open(&opts.inner, path)?);
     Self::try_put_placeholder_to_fix_wal_bug(inner_db.clone())?;
     Self::ensure_ttl_enabled_consistent(inner_db.clone(), false)?;
@@ -86,6 +93,7 @@ impl NormalDb {
       ),
       last_table_id: AtomicU32::new(Self::get_last_table_id(inner_db)?),
       initializer: ConcurrentInitializer::new(),
+      opts,
     })
   }
 }
@@ -250,7 +258,7 @@ mod tests {
     for ub in iter {
       result.push(ub.unwrap());
     }
-    assert_eq!(format!("{:?}", result), "[WriteOpBatch { sn: 2, write_ops: [OptionalWriteOp { inner: Some(PutOp(PutOp { inner_key: b\"\\0\\0\\0\\0\\0\\x01\", inner_value: b\"\\0\" })) }] }, WriteOpBatch { sn: 3, write_ops: [OptionalWriteOp { inner: Some(PutOp(PutOp { inner_key: b\"\\0\\0\\0\\x01huobi.btc.usdt.1m\", inner_value: b\"\\0\\0\\x04\\0\" })) }, OptionalWriteOp { inner: Some(PutOp(PutOp { inner_key: b\"\\0\\0\\0\\x02\\0\\0\\x04\\0\", inner_value: b\"huobi.btc.usdt.1m\" })) }] }, WriteOpBatch { sn: 5, write_ops: [OptionalWriteOp { inner: Some(PutOp(PutOp { inner_key: b\"\\0\\0\\0\\x01huobi.btc.usdt.3m\", inner_value: b\"\\0\\0\\x04\\x01\" })) }, OptionalWriteOp { inner: Some(PutOp(PutOp { inner_key: b\"\\0\\0\\0\\x02\\0\\0\\x04\\x01\", inner_value: b\"huobi.btc.usdt.3m\" })) }] }, WriteOpBatch { sn: 7, write_ops: [OptionalWriteOp { inner: Some(DeleteOp(DeleteOp { inner_key: b\"\\0\\0\\0\\x01huobi.btc.usdt.3m\" })) }, OptionalWriteOp { inner: Some(DeleteOp(DeleteOp { inner_key: b\"\\0\\0\\0\\x02\\0\\0\\x04\\x01\" })) }, OptionalWriteOp { inner: Some(DeleteRangeOp(DeleteRangeOp { begin_inner_key: b\"\\0\\0\\x04\\x01\", end_inner_key: b\"\\0\\0\\x04\\x01\\xff\\xff\\xff\\xff\\xff\" })) }] }, WriteOpBatch { sn: 10, write_ops: [OptionalWriteOp { inner: Some(PutOp(PutOp { inner_key: b\"\\0\\0\\x04\\x01k111\", inner_value: b\"v111\" })) }] }, WriteOpBatch { sn: 11, write_ops: [OptionalWriteOp { inner: Some(DeleteOp(DeleteOp { inner_key: b\"\\0\\0\\x04\\x01k111\" })) }] }, WriteOpBatch { sn: 12, write_ops: [OptionalWriteOp { inner: Some(PutOp(PutOp { inner_key: b\"\\0\\0\\x04\\x01k112\", inner_value: b\"v112\" })) }, OptionalWriteOp { inner: Some(DeleteOp(DeleteOp { inner_key: b\"\\0\\0\\x04\\x01k111\" })) }, OptionalWriteOp { inner: Some(DeleteRangeOp(DeleteRangeOp { begin_inner_key: b\"\\0\\0\\x04\\x01k111\", end_inner_key: b\"\\0\\0\\x04\\x01k112\" })) }] }]");
+    assert_eq!(format!("{:?}", result), "[WriteOpBatch { sn: 2, write_ops: [OptionalWriteOp { inner: Some(PutOp(PutOp { inner_key: b\"\\0\\0\\0\\0\\x01\\0\\x01\", inner_value: b\"\\0\" })) }] }, WriteOpBatch { sn: 3, write_ops: [OptionalWriteOp { inner: Some(PutOp(PutOp { inner_key: b\"\\0\\0\\0\\x01\\x01huobi.btc.usdt.1m\", inner_value: b\"\\0\\0\\x04\\0\" })) }, OptionalWriteOp { inner: Some(PutOp(PutOp { inner_key: b\"\\0\\0\\0\\x02\\x01\\0\\0\\x04\\0\", inner_value: b\"huobi.btc.usdt.1m\" })) }] }, WriteOpBatch { sn: 5, write_ops: [OptionalWriteOp { inner: Some(PutOp(PutOp { inner_key: b\"\\0\\0\\0\\x01\\x01huobi.btc.usdt.3m\", inner_value: b\"\\0\\0\\x04\\x01\" })) }, OptionalWriteOp { inner: Some(PutOp(PutOp { inner_key: b\"\\0\\0\\0\\x02\\x01\\0\\0\\x04\\x01\", inner_value: b\"huobi.btc.usdt.3m\" })) }] }, WriteOpBatch { sn: 7, write_ops: [OptionalWriteOp { inner: Some(DeleteOp(DeleteOp { inner_key: b\"\\0\\0\\0\\x01\\x01huobi.btc.usdt.3m\" })) }, OptionalWriteOp { inner: Some(DeleteOp(DeleteOp { inner_key: b\"\\0\\0\\0\\x02\\x01\\0\\0\\x04\\x01\" })) }, OptionalWriteOp { inner: Some(DeleteRangeOp(DeleteRangeOp { begin_inner_key: b\"\\0\\0\\x04\\x01\\0\", end_inner_key: b\"\\0\\0\\x04\\x01\\x02\" })) }] }, WriteOpBatch { sn: 10, write_ops: [OptionalWriteOp { inner: Some(PutOp(PutOp { inner_key: b\"\\0\\0\\x04\\x01\\x01k111\", inner_value: b\"v111\" })) }] }, WriteOpBatch { sn: 11, write_ops: [OptionalWriteOp { inner: Some(DeleteOp(DeleteOp { inner_key: b\"\\0\\0\\x04\\x01\\x01k111\" })) }] }, WriteOpBatch { sn: 12, write_ops: [OptionalWriteOp { inner: Some(PutOp(PutOp { inner_key: b\"\\0\\0\\x04\\x01\\x01k112\", inner_value: b\"v112\" })) }, OptionalWriteOp { inner: Some(DeleteOp(DeleteOp { inner_key: b\"\\0\\0\\x04\\x01\\x01k111\" })) }, OptionalWriteOp { inner: Some(DeleteRangeOp(DeleteRangeOp { begin_inner_key: b\"\\0\\0\\x04\\x01\\x01k111\", end_inner_key: b\"\\0\\0\\x04\\x01\\x01k112\" })) }] }]");
   }
 
   #[test]

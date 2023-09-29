@@ -20,7 +20,7 @@ pub struct TtlTableWeighter;
 
 impl Weighter<String, Arc<TtlTable>> for TtlTableWeighter {
   fn weight(&self, _key: &String, val: &Arc<TtlTable>) -> u32 {
-    12 + val.anchor.len() as u32
+    12 + val.tail_anchor.len() as u32
   }
 }
 
@@ -29,6 +29,7 @@ pub struct TtlDb {
   pub(crate) cache: Cache<String, Arc<TtlTable>, TtlTableWeighter>,
   pub(crate) last_table_id: AtomicU32,
   pub(crate) initializer: ConcurrentInitializer<String, TableId>,
+  pub(crate) opts: Options,
 }
 
 impl Db for TtlDb {
@@ -59,12 +60,17 @@ impl Db for TtlDb {
     &self.initializer
   }
 
+  #[inline]
+  fn opts(&self) -> &Options {
+    &self.opts
+  }
+
   ////////////////////////////////////////////////////////////////////////////////
   /// APIs
   ////////////////////////////////////////////////////////////////////////////////
   #[inline]
-  fn new_table(&self, id: TableId, anchor: bytes::Bytes) -> Self::Table {
-    TtlTable::new(self.inner.clone(), id, anchor)
+  fn new_table(&self, id: TableId) -> Self::Table {
+    TtlTable::new(self.inner.clone(), id)
   }
 
   #[inline]
@@ -74,7 +80,8 @@ impl Db for TtlDb {
 }
 
 impl TtlDb {
-  pub fn open<P: AsRef<Path>>(path: P, ttl: u32, opts: &mut Options) -> Result<Self, Error> {
+  pub fn open<P: AsRef<Path>>(path: P, ttl: u32, opts: &Options) -> Result<Self, Error> {
+    let mut opts = opts.clone();
     opts.set_compaction_filter_factory(CompactionFilterFactoryImpl::new(ttl));
     let inner_db = Arc::new(RocksdbDb::open(&opts.inner, path)?);
     Self::try_put_placeholder_to_fix_wal_bug(inner_db.clone())?;
@@ -88,6 +95,7 @@ impl TtlDb {
       ),
       last_table_id: AtomicU32::new(Self::get_last_table_id(inner_db)?),
       initializer: ConcurrentInitializer::new(),
+      opts,
     })
   }
 }

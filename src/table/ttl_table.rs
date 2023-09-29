@@ -17,12 +17,12 @@ use crate::write_batch::*;
 pub struct TtlTable {
   pub(crate) inner_db: Arc<RocksdbDb>,
   pub(crate) id: TableId,
-  pub(crate) anchor: Bytes,
+  pub(crate) tail_anchor: Bytes,
 }
 
 impl fmt::Debug for TtlTable {
   fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-    write!(f, "id: {:?}, anchor: {:?}", self.id, self.anchor)
+    write!(f, "TtlTable: id: {:?}", self.id)
   }
 }
 
@@ -72,14 +72,14 @@ impl Table for TtlTable {
   fn new_cursor<'a>(&'a self) -> Self::Cursor<'a> {
     let mut opts = ReadOptions::default();
     opts.set_prefix_same_as_start(true);
-    TtlCursor::new(self.inner_db.raw_iterator_opt(opts), self.id, &self.anchor)
+    TtlCursor::new(self.inner_db.raw_iterator_opt(opts), self.id, &self.tail_anchor)
   }
 }
 
 impl TtlTable {
   #[inline]
-  pub(crate) fn new(inner_db: Arc<RocksdbDb>, id: TableId, anchor: Bytes) -> Self {
-    TtlTable { inner_db, id, anchor }
+  pub(crate) fn new(inner_db: Arc<RocksdbDb>, id: TableId) -> Self {
+    TtlTable { inner_db, id, tail_anchor: build_tail_anchor(id) }
   }
 
   #[inline]

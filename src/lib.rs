@@ -1,13 +1,13 @@
 pub mod coder;
 pub(crate) mod compact_filter;
-pub(crate) mod consts;
+pub mod consts;
 pub mod cursor;
 pub mod db;
 pub mod error;
 pub mod options;
 pub mod table;
 pub mod types;
-pub(crate) mod utils;
+pub mod utils;
 pub mod write_batch;
 pub mod write_op;
 

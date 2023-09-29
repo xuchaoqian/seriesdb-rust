@@ -18,7 +18,7 @@ where Self: 'a {
 
   fn table_id(&self) -> TableId;
 
-  fn anchor(&self) -> &'a Bytes;
+  fn tail_anchor(&self) -> &'a Bytes;
 
   ////////////////////////////////////////////////////////////////////////////////
   /// APIs
@@ -41,8 +41,8 @@ where Self: 'a {
 
   #[inline]
   fn seek_to_last(&mut self) {
-    let anchor = self.anchor();
-    self.inner_mut().seek_for_prev(anchor);
+    let tail_anchor = self.tail_anchor();
+    self.inner_mut().seek_for_prev(tail_anchor);
   }
 
   #[inline]

@@ -5,6 +5,7 @@ use rocksdb::{
 
 use crate::consts::*;
 
+#[derive(Clone)]
 pub struct Options {
   pub(crate) inner: RocksdbOptions,
   pub(crate) cache_capacity: usize,

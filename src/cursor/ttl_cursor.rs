@@ -8,7 +8,7 @@ use crate::utils::*;
 pub struct TtlCursor<'a> {
   pub(crate) inner: DBRawIterator<'a>,
   pub(crate) table_id: TableId,
-  pub(crate) anchor: &'a Bytes,
+  pub(crate) tail_anchor: &'a Bytes,
 }
 
 impl<'a> Cursor<'a> for TtlCursor<'a> {
@@ -31,8 +31,8 @@ impl<'a> Cursor<'a> for TtlCursor<'a> {
   }
 
   #[inline(always)]
-  fn anchor(&self) -> &'a Bytes {
-    &self.anchor
+  fn tail_anchor(&self) -> &'a Bytes {
+    &self.tail_anchor
   }
 
   ////////////////////////////////////////////////////////////////////////////////
@@ -59,7 +59,7 @@ impl<'a> Cursor<'a> for TtlCursor<'a> {
 
 impl<'a> TtlCursor<'a> {
   pub fn new(inner: DBRawIterator<'a>, table_id: TableId, anchor: &'a Bytes) -> Self {
-    TtlCursor { inner, table_id, anchor }
+    TtlCursor { inner, table_id, tail_anchor: anchor }
   }
 
   #[inline]
