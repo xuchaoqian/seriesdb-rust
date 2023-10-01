@@ -3,7 +3,7 @@ use std::{
   ffi::CString,
   path::{Path, PathBuf},
   sync::{
-    atomic::{AtomicU64, Ordering as AtomicOrdering},
+    atomic::{AtomicU32, Ordering as AtomicOrdering},
     Arc,
   },
 };
@@ -23,12 +23,13 @@ use crate::table::*;
 use crate::types::*;
 use crate::utils::*;
 
+static ID_SEED: AtomicU32 = AtomicU32::new(1);
+
 pub struct CompactionFilterFactoryImpl {
   name: CString,
   path: PathBuf,
   ttl: u32,
   opts: Options,
-  id: AtomicU64,
 }
 
 impl CompactionFilterFactory for CompactionFilterFactoryImpl {
@@ -36,16 +37,12 @@ impl CompactionFilterFactory for CompactionFilterFactoryImpl {
 
   #[inline]
   fn create(&mut self, _context: CompactionFilterContext) -> Self::Filter {
-    log::info!(
-      "Creating a compaction filter<{:?}>...",
-      self.id.fetch_add(1, AtomicOrdering::Relaxed)
-    );
     match RocksdbDb::open_for_read_only(&self.opts.inner, self.path.clone(), false) {
       Ok(rocksdb) => {
         CompactionFilterImpl::new(self.ttl, Some(MaxKeyComparator::new(Arc::new(rocksdb))))
       }
       Err(err) => {
-        log::error!("Failed to open db for read only: err: {:?}", err);
+        log::error!("Creating a pesudo filter instance, since it's failed to open db for read only: err: {:?}", err);
         CompactionFilterImpl::new(self.ttl, None)
       }
     }
@@ -60,12 +57,13 @@ impl CompactionFilterFactory for CompactionFilterFactoryImpl {
 impl CompactionFilterFactoryImpl {
   #[inline]
   pub fn new<P: AsRef<Path>>(path: P, ttl: u32, opts: Options) -> Self {
+    let name = "seriesdb_compaction_filter_factory";
+    log::info!("Creating a compaction filter factory: name: {:?}", name);
     CompactionFilterFactoryImpl {
-      name: CString::new("seriesdb_compaction_filter_factory").unwrap(),
+      name: CString::new(name).unwrap(),
       path: path.as_ref().to_path_buf(),
       ttl,
       opts,
-      id: AtomicU64::new(1),
     }
   }
 }
@@ -110,11 +108,10 @@ impl CompactionFilter for CompactionFilterImpl {
 impl CompactionFilterImpl {
   #[inline]
   pub fn new(ttl: u32, max_key_comparator: Option<MaxKeyComparator>) -> Self {
-    CompactionFilterImpl {
-      name: CString::new("seriesdb_compaction_filter").unwrap(),
-      ttl,
-      max_key_comparator,
-    }
+    let name =
+      format!("seriesdb_compaction_filter<{:?}>", ID_SEED.fetch_add(1, AtomicOrdering::Relaxed));
+    log::info!("Creating a compaction filter: name: {:?}", name);
+    CompactionFilterImpl { name: CString::new(name).unwrap(), ttl, max_key_comparator }
   }
 }
 

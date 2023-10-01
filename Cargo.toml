@@ -7,18 +7,16 @@ version = "0.10.0"
 [dependencies]
 ahash = "0.8.3"
 byteorder = "1.4.3"
-bytes = "1.4.0"
-chrono = "0.4.28"
+bytes = "1.5.0"
+chrono = "0.4.31"
 concurrent-initializer = {git = "https://github.com/xuchaoqian/concurrent-initializer-rust.git", branch = "main"}
 log = "0.4.20"
-parking_lot = "0.12"
-prost = "0.12.0"
+prost = "0.12.1"
 quick_cache = "0.4.0"
 rocksdb = {git = "https://github.com/xuchaoqian/rust-rocksdb.git", branch = "more-apis-for-writebatch-handler", features = [
   "multi-threaded-cf",
 ]}
-serde = "1.0.188"
-thiserror = "1.0.47"
+thiserror = "1.0.49"
 
 [dev-dependencies]
 criterion = {version = "0.5", features = ["html_reports"]}
