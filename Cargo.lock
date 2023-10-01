@@ -877,13 +877,15 @@ dependencies = [
 
 [[package]]
 name = "seriesdb"
-version = "0.9.5"
+version = "0.10.0"
 dependencies = [
+ "ahash",
  "byteorder",
  "bytes",
  "chrono",
  "concurrent-initializer",
  "criterion",
+ "log",
  "parking_lot",
  "prost",
  "quick_cache",

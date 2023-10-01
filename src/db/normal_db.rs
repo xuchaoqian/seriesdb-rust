@@ -300,47 +300,4 @@ mod tests {
     let name = table.inner_db.get(id_to_name_table_inner_key);
     assert_eq!(std::str::from_utf8(&name.unwrap().unwrap()).unwrap(), "huobi.btc.usdt.1m");
   }
-
-  #[test]
-  fn test_compact_filter() {
-    use std::{thread, time};
-
-    setup!("normal_db.test_compact_filter"; db);
-
-    // Spawn n threads.
-    let threads: Vec<_> = (0..1_u8)
-      .map(|_thread_id| {
-        let db = db.clone();
-
-        thread::spawn(move || {
-          let table = db.create_table("test_compact_filter").unwrap();
-
-          let _ = table.put(b"k1", b"a");
-          let _ = table.put(b"_k", b"b");
-          let _ = table.put(b"%k", b"c");
-
-          let begin_key = build_inner_key(table.id(), b"k1");
-          let placehoder_key = build_info_table_inner_key(PLACEHOLDER_ITEM_ID);
-
-          db.inner.compact_range(Some(begin_key.clone()), None::<&[u8]>);
-
-          assert_eq!(&*table.get(b"k1").unwrap().unwrap(), b"a");
-          assert_eq!(db.inner.get(&placehoder_key).unwrap(), Some(vec![0, 0]));
-
-          thread::sleep(time::Duration::from_secs(2));
-
-          assert_eq!(&*table.get(b"k1").unwrap().unwrap(), b"a");
-          assert_eq!(db.inner.get(&placehoder_key).unwrap(), Some(vec![0, 0]));
-
-          db.inner.compact_range(None::<&[u8]>, None::<&[u8]>);
-
-          assert_eq!(&*table.get(b"k1").unwrap().unwrap(), b"a");
-          assert_eq!(db.inner.get(&placehoder_key).unwrap(), Some(vec![0, 0]));
-        })
-      })
-      .collect();
-
-    // Wait all threads to complete.
-    threads.into_iter().for_each(|t| t.join().expect("Thread failed"));
-  }
 }

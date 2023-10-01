@@ -58,6 +58,7 @@ impl<'a> Cursor<'a> for TtlCursor<'a> {
 }
 
 impl<'a> TtlCursor<'a> {
+  #[inline]
   pub fn new(inner: DBRawIterator<'a>, table_id: TableId, anchor: &'a Bytes) -> Self {
     TtlCursor { inner, table_id, tail_anchor: anchor }
   }

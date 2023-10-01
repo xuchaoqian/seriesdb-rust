@@ -54,6 +54,7 @@ impl<'a> Cursor<'a> for NormalCursor<'a> {
 }
 
 impl<'a> NormalCursor<'a> {
+  #[inline]
   pub fn new(inner: DBRawIterator<'a>, table_id: TableId, anchor: &'a Bytes) -> Self {
     NormalCursor { inner, table_id, tail_anchor: anchor }
   }

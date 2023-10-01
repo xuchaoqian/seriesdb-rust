@@ -13,6 +13,7 @@ pub struct WriteOpBatch {
 }
 
 impl WriteBatchIterator for WriteOpBatch {
+  #[inline]
   fn put(&mut self, inner_key: Box<[u8]>, inner_value: Box<[u8]>) {
     let put_op = PutOp {
       inner_key: Bytes::copy_from_slice(inner_key.as_ref()),
@@ -21,11 +22,13 @@ impl WriteBatchIterator for WriteOpBatch {
     self.write_ops.push(OptionalWriteOp { inner: Some(WriteOp::PutOp(put_op)) })
   }
 
+  #[inline]
   fn delete(&mut self, inner_key: Box<[u8]>) {
     let delete_op = DeleteOp { inner_key: Bytes::copy_from_slice(inner_key.as_ref()) };
     self.write_ops.push(OptionalWriteOp { inner: Some(WriteOp::DeleteOp(delete_op)) })
   }
 
+  #[inline]
   fn delete_range(&mut self, begin_inner_key: Box<[u8]>, end_inner_key: Box<[u8]>) {
     let delete_range_op = DeleteRangeOp {
       begin_inner_key: Bytes::copy_from_slice(begin_inner_key.as_ref()),
@@ -34,6 +37,7 @@ impl WriteBatchIterator for WriteOpBatch {
     self.write_ops.push(OptionalWriteOp { inner: Some(WriteOp::DeleteRangeOp(delete_range_op)) })
   }
 
+  #[inline]
   fn merge(&mut self, inner_key: Box<[u8]>, inner_value: Box<[u8]>) {
     let merge_op = MergeOp {
       inner_key: Bytes::copy_from_slice(inner_key.as_ref()),
@@ -44,6 +48,7 @@ impl WriteBatchIterator for WriteOpBatch {
 }
 
 impl WriteOpBatch {
+  #[inline]
   pub fn new() -> Self {
     WriteOpBatch { sn: 0, write_ops: vec![] }
   }

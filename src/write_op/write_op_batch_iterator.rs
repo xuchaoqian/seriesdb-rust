@@ -31,6 +31,7 @@ impl Iterator for WriteOpBatchIterator {
 }
 
 impl WriteOpBatchIterator {
+  #[inline]
   pub fn new(inner: DBWALIterator) -> Self {
     WriteOpBatchIterator { inner }
   }

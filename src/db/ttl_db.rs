@@ -19,6 +19,7 @@ use crate::write_batch::*;
 pub struct TtlTableWeighter;
 
 impl Weighter<String, Arc<TtlTable>> for TtlTableWeighter {
+  #[inline]
   fn weight(&self, _key: &String, val: &Arc<TtlTable>) -> u32 {
     12 + val.tail_anchor.len() as u32
   }
@@ -82,8 +83,8 @@ impl Db for TtlDb {
 impl TtlDb {
   pub fn open<P: AsRef<Path>>(path: P, ttl: u32, opts: &Options) -> Result<Self, Error> {
     let mut opts = opts.clone();
-    opts.set_compaction_filter_factory(CompactionFilterFactoryImpl::new(ttl));
-    let inner_db = Arc::new(RocksdbDb::open(&opts.inner, path)?);
+    opts.set_compaction_filter_factory(CompactionFilterFactoryImpl::new(&path, ttl, opts.clone()));
+    let inner_db = Arc::new(RocksdbDb::open(&opts.inner, &path)?);
     Self::try_put_placeholder_to_fix_wal_bug(inner_db.clone())?;
     Self::ensure_ttl_enabled_consistent(inner_db.clone(), true)?;
     Ok(TtlDb {
@@ -276,10 +277,10 @@ mod tests {
           let table = db.create_table("test_compact_filter").unwrap();
 
           let _ = table.put(b"k1", b"a");
-          let _ = table.put(b"_k", b"b");
-          let _ = table.put(b"%k", b"c");
+          let _ = table.put(b"k2", b"b");
+          let _ = table.put(b"k3", b"c");
 
-          let begin_key = build_inner_key(table.id(), b"k1");
+          let begin_key = build_inner_key(table.id(), b"k2");
           let placehoder_key = build_info_table_inner_key(PLACEHOLDER_ITEM_ID);
 
           db.inner.compact_range(Some(begin_key.clone()), None::<&[u8]>);
@@ -295,6 +296,8 @@ mod tests {
           db.inner.compact_range(None::<&[u8]>, None::<&[u8]>);
 
           assert!(table.get(b"k1").unwrap().is_none());
+          assert!(table.get(b"k2").unwrap().is_none());
+          assert_eq!(&*table.get(b"k3").unwrap().unwrap(), b"c");
           assert_eq!(db.inner.get(&placehoder_key).unwrap(), Some(vec![0, 0]));
         })
       })

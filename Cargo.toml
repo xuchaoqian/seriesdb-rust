@@ -2,13 +2,15 @@
 authors = ["Chaoqian Xu <chaoranxu@gmail.com>"]
 edition = "2021"
 name = "seriesdb"
-version = "0.9.5"
+version = "0.10.0"
 
 [dependencies]
+ahash = "0.8.3"
 byteorder = "1.4.3"
 bytes = "1.4.0"
 chrono = "0.4.28"
 concurrent-initializer = {git = "https://github.com/xuchaoqian/concurrent-initializer-rust.git", branch = "main"}
+log = "0.4.20"
 parking_lot = "0.12"
 prost = "0.12.0"
 quick_cache = "0.4.0"
