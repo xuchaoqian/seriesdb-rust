@@ -2,7 +2,7 @@
 authors = ["Chaoqian Xu <chaoranxu@gmail.com>"]
 edition = "2021"
 name = "seriesdb"
-version = "0.10.0"
+version = "0.10.1"
 
 [dependencies]
 ahash = "0.8.3"

@@ -132,7 +132,7 @@ impl MaxKeyComparator {
       if cached_max_key.as_ref().cmp(key) != CmpOrdering::Greater {
         if let Some(stored_max_key) = self.get_max_key(table_id) {
           let ordering = stored_max_key.as_ref().cmp(key);
-          self.cache.insert(table_id, cached_max_key.clone());
+          self.cache.insert(table_id, stored_max_key);
           ordering
         } else {
           CmpOrdering::Equal

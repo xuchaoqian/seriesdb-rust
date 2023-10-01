@@ -192,16 +192,16 @@ impl<T: Table, K, V, C: Coder<K, V>> TableEnhanced<T, K, V, C> {
 #[cfg(test)]
 mod tests {
 
-  use std::{borrow::Borrow, vec};
+  use std::{borrow::Borrow, thread, time::Duration, vec};
 
   use byteorder::{BigEndian, ByteOrder};
   use bytes::{Bytes, BytesMut};
 
   use crate::coder::Coder as SeriesdbCoder;
   use crate::db::*;
-  use crate::setup;
   use crate::table::*;
   use crate::types::*;
+  use crate::{setup, setup_with_ttl};
 
   type Key = u32;
   type Value = Bytes;
@@ -419,13 +419,35 @@ mod tests {
     table.put(k2, v2).unwrap();
     table.put(k3, v3).unwrap();
 
-    use crate::cursor::Cursor;
-    let mut cursor = table.new_cursor().raw;
-    cursor.seek_to_first();
-    while cursor.is_valid() {
-      cursor.next();
-    }
+    assert_eq!(table.get_last_key().unwrap(), k3);
+  }
 
+  #[test]
+  fn test_get_last_key_with_ttl() {
+    setup_with_ttl!("table_enhanced.get_last_key_with_ttl"; 1; db);
+    let name = "huobi.btc.usdt.1min";
+    let table = db.open_table(name).unwrap().enhance::<Key, Value, Coder>();
+
+    let k1 = 1;
+    let k2 = 2;
+    let k3 = 3;
+    let v1 = Bytes::from("1");
+    let v2 = Bytes::from("2");
+    let v3 = Bytes::from("3");
+
+    assert!(table.get_last_key().is_none());
+
+    table.put(k1, v1).unwrap();
+    table.put(k2, v2).unwrap();
+    table.put(k3, v3).unwrap();
+
+    assert_eq!(table.get_first_key().unwrap(), k1);
+    assert_eq!(table.get_last_key().unwrap(), k3);
+
+    thread::sleep(Duration::from_secs(2));
+    db.inner.compact_range(None::<&[u8]>, None::<&[u8]>);
+
+    assert_eq!(table.get_first_key().unwrap(), k3);
     assert_eq!(table.get_last_key().unwrap(), k3);
   }
 
