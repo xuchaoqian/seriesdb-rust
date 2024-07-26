@@ -20,8 +20,8 @@ pub struct TtlTableWeighter;
 
 impl Weighter<String, Arc<TtlTable>> for TtlTableWeighter {
   #[inline]
-  fn weight(&self, _key: &String, val: &Arc<TtlTable>) -> u32 {
-    12 + val.tail_anchor.len() as u32
+  fn weight(&self, _key: &String, val: &Arc<TtlTable>) -> u64 {
+    12 + val.tail_anchor.len() as u64
   }
 }
 
@@ -243,15 +243,14 @@ mod tests {
     setup_with_ttl!("ttl_db.test_register_table"; 3; db);
 
     let name = "huobi.btc.usdt.1m";
-    let name_clone = name.clone();
     let table = db.open_table(name).unwrap();
-    let name_to_id_table_inner_key = build_name_to_id_table_inner_key(&name_clone);
+    let name_to_id_table_inner_key = build_name_to_id_table_inner_key(name);
     let id_to_name_table_inner_key = build_id_to_name_table_inner_key(MIN_USERLAND_TABLE_ID);
     let result = db.register_table(
       &name_to_id_table_inner_key,
       MIN_USERLAND_TABLE_ID,
       &id_to_name_table_inner_key,
-      &name_clone,
+      name,
     );
     assert!(result.is_ok());
 

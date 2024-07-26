@@ -18,8 +18,8 @@ use crate::write_batch::*;
 pub struct NormalTableWeighter;
 
 impl Weighter<String, Arc<NormalTable>> for NormalTableWeighter {
-  fn weight(&self, _key: &String, _val: &Arc<NormalTable>) -> u32 {
-    16 as u32
+  fn weight(&self, _key: &String, _val: &Arc<NormalTable>) -> u64 {
+    16
   }
 }
 
@@ -282,15 +282,14 @@ mod tests {
     setup!("normal_db.test_register_table"; db);
 
     let name = "huobi.btc.usdt.1m";
-    let name_clone = name.clone();
     let table = db.open_table(name).unwrap();
-    let name_to_id_table_inner_key = build_name_to_id_table_inner_key(&name_clone);
+    let name_to_id_table_inner_key = build_name_to_id_table_inner_key(name);
     let id_to_name_table_inner_key = build_id_to_name_table_inner_key(MIN_USERLAND_TABLE_ID);
     let result = db.register_table(
       &name_to_id_table_inner_key,
       MIN_USERLAND_TABLE_ID,
       &id_to_name_table_inner_key,
-      &name_clone,
+      name,
     );
     assert!(result.is_ok());
 
