@@ -1,19 +1,26 @@
 [package]
-authors = ["Chaoqian Xu <chaoranxu@gmail.com>"]
-edition = "2021"
 name = "seriesdb"
-version = "0.11.0"
+version = "0.11.1"
+description = "A blazing fast key-ordered db which empowered by RocksDB but supports billions of tables."
+authors = ["Chaoqian Xu <chaoranxu@gmail.com>"]
+license = "Apache-2.0"
+readme = "README.md"
+repository = "https://github.com/xuchaoqian/seriesdb-rust"
+keywords = ["database"]
+exclude = ["/benches", ".vscode", "target", "Cargo.lock"]
+edition = "2021"
+rust-version = "1.75"
 
 [dependencies]
 ahash = "0.8.11"
 byteorder = "1.5.0"
 bytes = "1.6.1"
 chrono = "0.4.38"
-concurrent-initializer = {git = "https://github.com/xuchaoqian/concurrent-initializer-rust.git", branch = "main"}
+concurrent-initializer = "0.5.1"
 log = "0.4.22"
 prost = "0.13.1"
 quick_cache = "0.6.2"
-rocksdb = {git = "https://github.com/xuchaoqian/rust-rocksdb.git", branch = "more-apis-for-writebatch-handler", features = [
+rocksdb = {git = "http://gitlab.aijiaoyi.xyz/all/rust-rocksdb.git", branch = "more-apis-for-writebatch-handler", features = [
   "multi-threaded-cf",
 ]}
 thiserror = "1.0.63"
